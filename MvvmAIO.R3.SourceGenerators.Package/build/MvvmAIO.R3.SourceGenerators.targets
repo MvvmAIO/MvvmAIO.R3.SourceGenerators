@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <!-- Set to false when referencing the generator via ProjectReference. -->
+    <MvvmAIOR3SourceGeneratorsImportAnalyzers Condition="'$(MvvmAIOR3SourceGeneratorsImportAnalyzers)' == ''">true</MvvmAIOR3SourceGeneratorsImportAnalyzers>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MvvmAIOR3SourceGeneratorsImportAnalyzers)' == 'true' and '$(MvvmAIOR3SourceGeneratorsAnalyzerAdded)' != 'true'">
+    <Analyzer Include="$(MSBuildThisFileDirectory)..\analyzers\dotnet\cs\MvvmAIO.R3.SourceGenerators.dll" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(MvvmAIOR3SourceGeneratorsImportAnalyzers)' == 'true'">
+    <MvvmAIOR3SourceGeneratorsAnalyzerAdded>true</MvvmAIOR3SourceGeneratorsAnalyzerAdded>
+  </PropertyGroup>
+</Project>

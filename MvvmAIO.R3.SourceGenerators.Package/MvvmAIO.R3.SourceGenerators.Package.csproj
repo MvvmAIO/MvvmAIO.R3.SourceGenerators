@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <PackageId>MvvmAIO.R3.SourceGenerators</PackageId>
+    <Version>0.1.1</Version>
+    <Authors>MvvmAIO</Authors>
+    <Description>Roslyn source generators for R3-based MVVM scenarios.</Description>
+    <PackageTags>r3;mvvm;source-generator;roslyn</PackageTags>
+    <PackageProjectUrl>https://github.com/MvvmAIO/MvvmAIO.R3.SourceGenerators</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MvvmAIO/MvvmAIO.R3.SourceGenerators</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.102" PrivateAssets="all" />
+    <ProjectReference Include="..\MvvmAIO.R3.SourceGenerators\MvvmAIO.R3.SourceGenerators.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\LICENSE.txt" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="build\MvvmAIO.R3.SourceGenerators.props" Pack="true" PackagePath="build/" Visible="false" />
+    <None Include="build\MvvmAIO.R3.SourceGenerators.props" Pack="true" PackagePath="buildTransitive/" Visible="false" />
+    <None Include="build\MvvmAIO.R3.SourceGenerators.targets" Pack="true" PackagePath="build/" Visible="false" />
+    <None Include="build\MvvmAIO.R3.SourceGenerators.targets" Pack="true" PackagePath="buildTransitive/" Visible="false" />
+    <None Include="..\MvvmAIO.R3.SourceGenerators\bin\$(Configuration)\netstandard2.0\MvvmAIO.R3.SourceGenerators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="BuildInputsBeforeNuspec" BeforeTargets="GenerateNuspec">
+    <ItemGroup>
+      <_PackInputProject Include="$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators\MvvmAIO.R3.SourceGenerators.csproj" />
+    </ItemGroup>
+    <MSBuild Projects="@(_PackInputProject)" Targets="Build" Properties="Configuration=$(Configuration);NoBuild=false" />
+  </Target>
+
+</Project>

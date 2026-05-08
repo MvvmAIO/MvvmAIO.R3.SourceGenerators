@@ -25,7 +25,7 @@ sealed class Build : NukeBuild
 
     AbsolutePath Root => RootDirectory;
     AbsolutePath SolutionFile => Root / "MvvmAIO.R3.SourceGenerators.slnx";
-    AbsolutePath GeneratorProject => Root / "MvvmAIO.R3.SourceGenerators" / "MvvmAIO.R3.SourceGenerators.csproj";
+    AbsolutePath PackageProject => Root / "MvvmAIO.R3.SourceGenerators.Package" / "MvvmAIO.R3.SourceGenerators.Package.csproj";
 
     public static int Main() => Execute<Build>(x => x.Ci);
 
@@ -53,7 +53,7 @@ sealed class Build : NukeBuild
             DotNetPack(s =>
             {
                 s = s
-                    .SetProject(GeneratorProject)
+                    .SetProject(PackageProject)
                     .SetConfiguration(Configuration)
                     .EnableNoBuild()
                     .SetProperty("ContinuousIntegrationBuild", "true");
@@ -73,7 +73,7 @@ sealed class Build : NukeBuild
         .Executes(() =>
         {
             DotNetNuGetPush(s => s
-                .SetTargetPath(Root / "MvvmAIO.R3.SourceGenerators" / "bin" / Configuration / "*.nupkg")
+                .SetTargetPath(Root / "MvvmAIO.R3.SourceGenerators.Package" / "bin" / Configuration / "*.nupkg")
                 .SetApiKey(NuGetApiKey)
                 .SetSource("https://api.nuget.org/v3/index.json")
                 .EnableSkipDuplicate());
