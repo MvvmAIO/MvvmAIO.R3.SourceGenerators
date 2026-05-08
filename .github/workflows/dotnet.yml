@@ -1,0 +1,52 @@
+name: .NET
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Run CI targets via Nuke
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run --project "build/_build.csproj" -- --target Ci --configuration Release 2>&1 | tee ci.log
+
+      - name: Upload CI log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-log
+          path: ./ci.log
+          if-no-files-found: warn
