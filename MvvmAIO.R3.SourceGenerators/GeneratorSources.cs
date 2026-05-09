@@ -16,6 +16,7 @@ public sealed class R3CommandAttribute : Attribute
 """;
 
     public const string ObservableEventsBootstrapExtensions = """
+#nullable enable
 namespace R3.ObservableEvents
 {
 internal static partial class ObservableEventsBootstrapExtensions
@@ -38,6 +39,7 @@ internal static partial class ObservableEventsBootstrapExtensions
 """;
 
     public const string NullEvents = """
+#nullable enable
 namespace R3.ObservableEvents
 {
 internal struct NullEvents

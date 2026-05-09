@@ -17,6 +17,15 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
     private const string BootstrapExtensionsMetadataName = "R3.ObservableEvents.ObservableEventsBootstrapExtensions";
     private const string GeneratedNamespace = "R3.ObservableEvents";
 
+    /// <summary>
+    /// Same as <see cref="SymbolDisplayFormat.FullyQualifiedFormat"/>, plus NRT <c>?</c> so emitted types match delegate/event signatures (<c>IncludeNullableReferenceTypeModifier</c>, <c>1 &lt;&lt; 6</c>; see dotnet/roslyn <c>SymbolDisplayMiscellaneousOptions</c> — not always present on older netstandard2 reference assemblies, so bitmask is spelled out).
+    /// </summary>
+    private static readonly SymbolDisplayFormat FullyQualifiedNullableFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(
+            (SymbolDisplayMiscellaneousOptions)(1 << 6));
+
+    private static string QualifiedType(ITypeSymbol type) => type.ToDisplayString(FullyQualifiedNullableFormat);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         context.RegisterPostInitializationOutput(static ctx =>
@@ -318,7 +327,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .AddMembers(members.ToArray());
         unit = unit.AddMembers(nsMember);
 
-        return unit.NormalizeWhitespace().ToFullString();
+        // Analyzer-generated translation units require an explicit `#nullable` directive before NRT punctuation (CS8669).
+        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
     }
 
     private static ClassDeclarationSyntax CreateExtensionsClass(INamedTypeSymbol type)
@@ -333,7 +343,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
     private static MethodDeclarationSyntax CreateFromEventsMethod(INamedTypeSymbol type)
     {
-        var typeName = SyntaxFactory.ParseTypeName(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        var typeName = SyntaxFactory.ParseTypeName(QualifiedType(type));
         var returnType = SyntaxFactory.ParseTypeName(GetWrapperName(type));
 
         return SyntaxFactory.MethodDeclaration(returnType, "ObservableEvents")
@@ -370,7 +380,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                             SyntaxFactory.ParseTypeName(GetWrapperName(baseType))))));
         }
 
-        var senderType = SyntaxFactory.ParseTypeName(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        var senderType = SyntaxFactory.ParseTypeName(QualifiedType(type));
         var field = SyntaxFactory.FieldDeclaration(
                 SyntaxFactory.VariableDeclaration(senderType)
                     .AddVariables(SyntaxFactory.VariableDeclarator("_sender")))
@@ -453,7 +463,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                      .Where(static e => e is { IsStatic: true, DeclaredAccessibility: Accessibility.Public }))
         {
             var eventTarget =
-                $"{evt.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{evt.Name}";
+                $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
             if (TryCreateEventMethod(evt, eventTarget, context, out var eventMethod))
             {
                 members.Add(eventMethod);
@@ -485,7 +495,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         }
 
         var returnType = GetObservableReturnType(invoke.Parameters);
-        var eventCref = $"{evt.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{evt.Name}";
+        var eventCref = $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
         var docXml = SyntaxFactory.ParseLeadingTrivia(
             $"/// <summary>\n" +
             $"/// <inheritdoc cref=\"{eventCref}\" />\n" +
@@ -517,7 +527,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         ImmutableArray<IParameterSymbol> parameters,
         string eventAccessorExpression)
     {
-        var eventType = delegateType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var eventType = QualifiedType(delegateType);
         if (parameters.Length == 0)
         {
             return
@@ -526,19 +536,19 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
         if (parameters.Length == 1)
         {
-            var t1 = parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var t1 = QualifiedType(parameters[0].Type);
             return
                 $"return global::R3.Observable.FromEvent<{eventType}, {t1}>(h => arg1 => h(arg1), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, cancellationToken);";
         }
 
         if (parameters.Length == 2 && parameters[0].Type.SpecialType == SpecialType.System_Object)
         {
-            var eventArgsType = parameters[1].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var eventArgsType = QualifiedType(parameters[1].Type);
             return
                 $"return global::R3.Observable.FromEvent<{eventType}, {eventArgsType}>(h => (sender, e) => h(e), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, cancellationToken);";
         }
 
-        var tupleType = $"({string.Join(", ", parameters.Select(static p => p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))})";
+        var tupleType = $"({string.Join(", ", parameters.Select(static p => QualifiedType(p.Type)))})";
         var tupleArgs = string.Join(", ", parameters.Select((_, i) => $"arg{i + 1}"));
         return
             $"return global::R3.Observable.FromEvent<{eventType}, {tupleType}>(h => ({tupleArgs}) => h(({tupleArgs})), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, cancellationToken);";
@@ -553,17 +563,17 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
         if (parameters.Length == 1)
         {
-            var t1 = parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var t1 = QualifiedType(parameters[0].Type);
             return $"global::R3.Observable<{t1}>";
         }
 
         if (parameters.Length == 2 && parameters[0].Type.SpecialType == SpecialType.System_Object)
         {
-            var eventArgsType = parameters[1].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var eventArgsType = QualifiedType(parameters[1].Type);
             return $"global::R3.Observable<{eventArgsType}>";
         }
 
-        var tupleType = $"({string.Join(", ", parameters.Select(static p => p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))})";
+        var tupleType = $"({string.Join(", ", parameters.Select(static p => QualifiedType(p.Type)))})";
         return $"global::R3.Observable<{tupleType}>";
     }
 
