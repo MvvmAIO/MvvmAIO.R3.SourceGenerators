@@ -26,7 +26,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         });
 
         var candidateInvocations = context.SyntaxProvider.CreateSyntaxProvider(
-            static (syntax, _) => IsCandidateInvocation(syntax),
+            static (syntax, _) => IsCandidateInvocation(syntax) || IsStaticCandidateInvocation(syntax),
             static (syntaxContext, _) => (InvocationExpressionSyntax)syntaxContext.Node);
 
         var inputs = candidateInvocations.Collect()
@@ -55,8 +55,34 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             Expression: MemberAccessExpressionSyntax
             {
                 Name.Identifier.ValueText: "ObservableEvents",
+                Expression: not GenericNameSyntax,
             },
         };
+
+    /// <summary>
+    /// Matches <c>ObservableEventsStatics.OBS_<em>StableHint</em>.ObservableEvents()</c> for static wrappers.
+    /// </summary>
+    private static bool IsStaticCandidateInvocation(SyntaxNode node)
+    {
+        if (node is not InvocationExpressionSyntax
+            {
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "ObservableEvents",
+                    Expression: MemberAccessExpressionSyntax
+                    {
+                        Expression: IdentifierNameSyntax { Identifier.ValueText: "ObservableEventsStatics" },
+                        Name: SimpleNameSyntax staticHintNameSyntax,
+                    },
+                },
+            })
+        {
+            return false;
+        }
+
+        var nestedId = staticHintNameSyntax.Identifier.ValueText;
+        return nestedId.StartsWith("OBS_", System.StringComparison.Ordinal);
+    }
 
     private static INamedTypeSymbol[] CollectTargetTypes(Compilation compilation, System.Collections.Immutable.ImmutableArray<InvocationExpressionSyntax> invocations)
     {
@@ -76,25 +102,167 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (!SymbolEqualityComparer.Default.Equals(methodSymbol.ContainingType, bootstrapType))
+            if (methodSymbol.Name != "ObservableEvents")
             {
                 continue;
             }
 
-            if (methodSymbol.TypeArguments.Length != 1 || methodSymbol.TypeArguments[0] is not INamedTypeSymbol namedType)
+            if (TryGetBootstrapObservableEventsExtensionTarget(invocation, semanticModel, methodSymbol, bootstrapType, out var instanceTarget))
             {
+                if (instanceTarget.IsGenericType)
+                {
+                    instanceTarget = instanceTarget.OriginalDefinition;
+                }
+
+                set.Add(instanceTarget);
                 continue;
             }
 
-            if (namedType.IsGenericType)
+            if (TryGetTypeFromObservableEventsStaticsNested(methodSymbol, bootstrapType, compilation, out var staticTarget))
             {
-                namedType = namedType.OriginalDefinition;
-            }
+                if (staticTarget.IsGenericType)
+                {
+                    staticTarget = staticTarget.OriginalDefinition;
+                }
 
-            set.Add(namedType);
+                set.Add(staticTarget);
+            }
         }
 
         return set.ToArray();
+    }
+
+    private static bool TryGetBootstrapObservableEventsExtensionTarget(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol bootstrapType,
+        out INamedTypeSymbol namedType)
+    {
+        namedType = null!;
+
+        static INamedTypeSymbol? FindBootstrapDeclaringType(IMethodSymbol m)
+        {
+            var decl = m.ReducedFrom ?? m;
+            return decl.ContainingType?.OriginalDefinition as INamedTypeSymbol;
+        }
+
+        if (FindBootstrapDeclaringType(methodSymbol) is not { } declaring
+            || !SymbolEqualityComparer.Default.Equals(declaring, bootstrapType.OriginalDefinition))
+        {
+            return false;
+        }
+
+        if (methodSymbol.TypeArguments.Length == 1 && methodSymbol.TypeArguments[0] is INamedTypeSymbol fromArgs)
+        {
+            namedType = fromArgs;
+            return true;
+        }
+
+        // Reduced extension inference: ObservableEvents() on explicit receiver without TypeArguments surfaced on symbol.
+        if (invocation.Expression is MemberAccessExpressionSyntax { Expression: ExpressionSyntax receiver })
+        {
+            if (semanticModel.GetTypeInfo(receiver).Type is INamedTypeSymbol receiverNamed)
+            {
+                namedType = receiverNamed;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Parses <c>ObservableEventsStatics.OBS_<em>StableHint</em>.ObservableEvents()</c> against generated code.
+    /// </summary>
+    private static bool TryGetTypeFromObservableEventsStaticsNested(
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol bootstrapType,
+        Compilation compilation,
+        out INamedTypeSymbol namedType)
+    {
+        namedType = null!;
+
+        if (methodSymbol.ReducedFrom is not null || methodSymbol.IsExtensionMethod || methodSymbol.Name != "ObservableEvents")
+        {
+            return false;
+        }
+
+        var nested = methodSymbol.ContainingType;
+        var outer = nested?.ContainingType;
+        if (nested is null || outer is null)
+        {
+            return false;
+        }
+
+        if (!string.Equals(outer.Name, "ObservableEventsStatics", System.StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!SymbolEqualityComparer.Default.Equals(outer.ContainingNamespace, bootstrapType.ContainingNamespace))
+        {
+            return false;
+        }
+
+        if (!nested.Name.StartsWith("OBS_", System.StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var hintStem = nested.Name.Substring(4);
+        return TryResolveNamedTypeByStableHint(compilation, hintStem, out namedType);
+    }
+
+    /// <remarks>
+    /// Must match identifiers produced via <see cref="INamedTypeSymbolExtensions.GetSafeHintName"/>.
+    /// </remarks>
+    private static bool TryResolveNamedTypeByStableHint(Compilation compilation, string hintStem, out INamedTypeSymbol namedType)
+    {
+        namedType = null!;
+        foreach (var candidate in EnumerateNamedTypesIncludingNested(compilation.GlobalNamespace))
+        {
+            if (!string.Equals(candidate.GetSafeHintName(), hintStem, System.StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            namedType = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<INamedTypeSymbol> EnumerateNamedTypesIncludingNested(INamespaceSymbol root)
+    {
+        foreach (var member in root.GetNamespaceMembers())
+        {
+            foreach (var t in EnumerateNamedTypesIncludingNested(member))
+            {
+                yield return t;
+            }
+        }
+
+        foreach (var named in root.GetTypeMembers())
+        {
+            foreach (var t in EnumerateSelfAndNestedNamedTypes(named))
+            {
+                yield return t;
+            }
+        }
+    }
+
+    private static IEnumerable<INamedTypeSymbol> EnumerateSelfAndNestedNamedTypes(INamedTypeSymbol type)
+    {
+        yield return type;
+        foreach (var nested in type.GetTypeMembers())
+        {
+            foreach (var t in EnumerateSelfAndNestedNamedTypes(nested))
+            {
+                yield return t;
+            }
+        }
     }
 
     private static INamedTypeSymbol[] ExpandWithBaseTypes(INamedTypeSymbol[] targetTypes)
@@ -139,6 +307,12 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             CreateExtensionsClass(type),
             CreateWrapperClass(type, allTypes, context)
         };
+
+        if (HasPublicStaticObservableEvents(type))
+        {
+            members.Add(CreateObservableEventsStaticsEntry(type));
+            members.Add(CreateStaticWrapperClass(type, context));
+        }
 
         var nsMember = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
             .AddMembers(members.ToArray());
@@ -223,7 +397,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var members = new List<MemberDeclarationSyntax> { field, ctor };
         foreach (var evt in type.GetMembers().OfType<IEventSymbol>().Where(static e => !e.IsStatic && e.DeclaredAccessibility == Accessibility.Public))
         {
-            if (TryCreateEventMethod(evt, context, out var eventMethod))
+            var eventTarget = $"_sender.{evt.Name}";
+            if (TryCreateEventMethod(evt, eventTarget, context, out var eventMethod))
             {
                 members.Add(eventMethod);
             }
@@ -232,7 +407,69 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         return classDeclaration.AddMembers(members.ToArray());
     }
 
-    private static bool TryCreateEventMethod(IEventSymbol evt, SourceProductionContext context, out MethodDeclarationSyntax method)
+    private static bool HasPublicStaticObservableEvents(INamedTypeSymbol type)
+        => type.GetMembers().OfType<IEventSymbol>().Any(static e =>
+            e is { IsStatic: true, DeclaredAccessibility: Accessibility.Public });
+
+    private static ClassDeclarationSyntax CreateObservableEventsStaticsEntry(INamedTypeSymbol type)
+    {
+        var nestedName = GetStaticObservableEventsNestedId(type);
+        var returnType = SyntaxFactory.ParseTypeName(GetStaticWrapperName(type));
+
+        var observableMethod = SyntaxFactory.MethodDeclaration(returnType, "ObservableEvents")
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                SyntaxFactory.Token(SyntaxKind.StaticKeyword))
+            .WithExpressionBody(
+                SyntaxFactory.ArrowExpressionClause(
+                    SyntaxFactory.ObjectCreationExpression(returnType)
+                        .WithArgumentList(SyntaxFactory.ArgumentList())))
+            .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+
+        var nested = SyntaxFactory.ClassDeclaration(nestedName)
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                SyntaxFactory.Token(SyntaxKind.PartialKeyword))
+            .AddMembers(observableMethod);
+
+        return SyntaxFactory.ClassDeclaration("ObservableEventsStatics")
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                SyntaxFactory.Token(SyntaxKind.PartialKeyword))
+            .AddMembers(nested);
+    }
+
+    private static ClassDeclarationSyntax CreateStaticWrapperClass(INamedTypeSymbol type, SourceProductionContext context)
+    {
+        var ctor = SyntaxFactory.ConstructorDeclaration(GetStaticWrapperName(type))
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
+            .WithBody(SyntaxFactory.Block());
+
+        var members = new List<MemberDeclarationSyntax> { ctor };
+
+        foreach (var evt in type.GetMembers().OfType<IEventSymbol>()
+                     .Where(static e => e is { IsStatic: true, DeclaredAccessibility: Accessibility.Public }))
+        {
+            var eventTarget =
+                $"{evt.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{evt.Name}";
+            if (TryCreateEventMethod(evt, eventTarget, context, out var eventMethod))
+            {
+                members.Add(eventMethod);
+            }
+        }
+
+        return SyntaxFactory.ClassDeclaration(GetStaticWrapperName(type))
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
+            .AddMembers(members.ToArray());
+    }
+
+    private static bool TryCreateEventMethod(
+        IEventSymbol evt,
+        string eventAccessorExpression,
+        SourceProductionContext context,
+        out MethodDeclarationSyntax method)
     {
         method = null!;
         if (evt.Type is not INamedTypeSymbol delegateType || delegateType.DelegateInvokeMethod is not IMethodSymbol invoke)
@@ -262,7 +499,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                     .WithType(SyntaxFactory.ParseTypeName("global::System.Threading.CancellationToken"))
                     .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression))));
 
-        var bodyStatement = BuildFromEventStatement(evt, delegateType, invoke.Parameters);
+        var bodyStatement = BuildFromEventStatement(delegateType, invoke.Parameters, eventAccessorExpression);
         if (bodyStatement is null)
         {
             ReportInvalidDelegate(evt, context);
@@ -274,36 +511,35 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
     }
 
     private static string? BuildFromEventStatement(
-        IEventSymbol evt,
         INamedTypeSymbol delegateType,
-        ImmutableArray<IParameterSymbol> parameters)
+        ImmutableArray<IParameterSymbol> parameters,
+        string eventAccessorExpression)
     {
         var eventType = delegateType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        var eventName = evt.Name;
         if (parameters.Length == 0)
         {
             return
-                $"return global::R3.Observable.FromEvent<{eventType}, global::R3.Unit>(h => () => h(global::R3.Unit.Default), e => _sender.{eventName} += e, e => _sender.{eventName} -= e, cancellationToken);";
+                $"return global::R3.Observable.FromEvent<{eventType}, global::R3.Unit>(h => () => h(global::R3.Unit.Default), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, cancellationToken);";
         }
 
         if (parameters.Length == 1)
         {
             var t1 = parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             return
-                $"return global::R3.Observable.FromEvent<{eventType}, {t1}>(h => arg1 => h(arg1), e => _sender.{eventName} += e, e => _sender.{eventName} -= e, cancellationToken);";
+                $"return global::R3.Observable.FromEvent<{eventType}, {t1}>(h => arg1 => h(arg1), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, cancellationToken);";
         }
 
         if (parameters.Length == 2 && parameters[0].Type.SpecialType == SpecialType.System_Object)
         {
             var eventArgsType = parameters[1].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             return
-                $"return global::R3.Observable.FromEvent<{eventType}, {eventArgsType}>(h => (sender, e) => h(e), e => _sender.{eventName} += e, e => _sender.{eventName} -= e, cancellationToken);";
+                $"return global::R3.Observable.FromEvent<{eventType}, {eventArgsType}>(h => (sender, e) => h(e), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, cancellationToken);";
         }
 
         var tupleType = $"({string.Join(", ", parameters.Select(static p => p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))})";
         var tupleArgs = string.Join(", ", parameters.Select((_, i) => $"arg{i + 1}"));
         return
-            $"return global::R3.Observable.FromEvent<{eventType}, {tupleType}>(h => ({tupleArgs}) => h(({tupleArgs})), e => _sender.{eventName} += e, e => _sender.{eventName} -= e, cancellationToken);";
+            $"return global::R3.Observable.FromEvent<{eventType}, {tupleType}>(h => ({tupleArgs}) => h(({tupleArgs})), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, cancellationToken);";
     }
 
     private static string GetObservableReturnType(ImmutableArray<IParameterSymbol> parameters)
@@ -339,6 +575,11 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
         return depth;
     }
+
+    private static string GetStaticObservableEventsNestedId(INamedTypeSymbol type) => $"OBS_{type.GetSafeHintName()}";
+
+    private static string GetStaticWrapperName(INamedTypeSymbol type) =>
+        $"{GetTypeUniqueIdentifier(type)}StaticFromEventObservable";
 
     private static string GetWrapperName(INamedTypeSymbol type) => $"{GetTypeUniqueIdentifier(type)}FromEventObservable";
 

@@ -24,6 +24,15 @@ internal static partial class ObservableEventsBootstrapExtensions
     {
         return default;
     }
+
+    /// <summary>
+    /// Dummy receiver for grouping static observable events (<c>ObservableEventsStatics</c> codegen).
+    /// Call <see cref=""ObservableEventsStatics{T}(T?)"/>: for example <c>((MyType?)null).ObservableEventsStatics()</c>.
+    /// </summary>
+    public static NullEvents ObservableEventsStatics<T>(this T? source)
+    {
+        return default;
+    }
 }
 }
 """;

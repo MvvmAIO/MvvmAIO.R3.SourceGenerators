@@ -10,7 +10,7 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 
     <PackageId>MvvmAIO.R3.SourceGenerators</PackageId>
-    <Version>0.1.1</Version>
+    <Version>0.1.4</Version>
     <Authors>MvvmAIO</Authors>
     <Description>Roslyn source generators for R3-based MVVM scenarios.</Description>
     <PackageTags>r3;mvvm;source-generator;roslyn</PackageTags>
@@ -43,6 +43,21 @@
       <_PackInputProject Include="$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators\MvvmAIO.R3.SourceGenerators.csproj" />
     </ItemGroup>
     <MSBuild Projects="@(_PackInputProject)" Targets="Build" Properties="Configuration=$(Configuration);NoBuild=false" />
+  </Target>
+
+  <!-- Populate pack inputs after analyzer build; GenerateNuspec snapshot can miss late None items. -->
+  <Target Name="IncludeAnalyzerDocumentation"
+          DependsOnTargets="BuildInputsBeforeNuspec"
+          BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <_AnalyzerXml>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators\bin\$(Configuration)\netstandard2.0\MvvmAIO.R3.SourceGenerators.xml'))</_AnalyzerXml>
+    </PropertyGroup>
+    <Warning Condition="!Exists('$(_AnalyzerXml)')"
+             Code="MvvmAIOR3PACK001"
+             Text="MvvmAIO.R3: expected analyzer XmlDoc at '$(_AnalyzerXml)' (enable GenerateDocumentationFile on the analyzer project)." />
+    <ItemGroup Condition="Exists('$(_AnalyzerXml)')">
+      <None Include="$(_AnalyzerXml)" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    </ItemGroup>
   </Target>
 
 </Project>

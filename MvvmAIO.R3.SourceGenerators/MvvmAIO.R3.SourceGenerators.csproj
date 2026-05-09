@@ -7,6 +7,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+
+    <!-- XML doc emitted next to the analyzer DLL build output; NuGet packs it via Package project into analyzers/dotnet/cs -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Analyzer surface is intentionally small — avoid CS1591 noise for internals without summaries -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
