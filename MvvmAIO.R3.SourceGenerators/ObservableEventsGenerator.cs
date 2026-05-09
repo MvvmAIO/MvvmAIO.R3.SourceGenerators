@@ -486,18 +486,20 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
         var returnType = GetObservableReturnType(invoke.Parameters);
         var eventCref = $"{evt.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{evt.Name}";
+        var docXml = SyntaxFactory.ParseLeadingTrivia(
+            $"/// <summary>\n" +
+            $"/// <inheritdoc cref=\"{eventCref}\" />\n" +
+            $"/// </summary>\n");
         var methodDeclaration = SyntaxFactory.MethodDeclaration(
                 SyntaxFactory.ParseTypeName(returnType),
                 evt.Name)
-            .WithLeadingTrivia(SyntaxFactory.ParseLeadingTrivia(
-                $"/// <summary>\n" +
-                $"/// <inheritdoc cref=\"{eventCref}\"/>\n" +
-                $"/// </summary>\n"))
             .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
             .AddParameterListParameters(
                 SyntaxFactory.Parameter(SyntaxFactory.Identifier("cancellationToken"))
                     .WithType(SyntaxFactory.ParseTypeName("global::System.Threading.CancellationToken"))
-                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression))));
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression))))
+            // Apply XML doc AFTER modifiers exist; trivia before ModifierList ends up below `public`
+            .WithLeadingTrivia(docXml);
 
         var bodyStatement = BuildFromEventStatement(delegateType, invoke.Parameters, eventAccessorExpression);
         if (bodyStatement is null)
