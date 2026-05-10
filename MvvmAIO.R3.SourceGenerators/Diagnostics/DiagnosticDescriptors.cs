@@ -29,4 +29,12 @@ internal static class DiagnosticDescriptors
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor InvalidFromEventHandlersDelegate = new(
+        id: "R3SG2002",
+        title: "FromEventHandlers requires EventHandler pattern",
+        messageFormat: "The event '{0}' must use System.EventHandler or System.EventHandler<TEventArgs> for FromEventHandlers.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
 }
