@@ -14,11 +14,11 @@ namespace MvvmAIO.R3.SourceGenerators;
 [Generator(LanguageNames.CSharp)]
 public sealed class ObservableEventsGenerator : IIncrementalGenerator
 {
-    private const string BootstrapExtensionsMetadataName = "R3.ObservableEventsBootstrapExtensions";
-    private const string GeneratedNamespace = "R3";
+    private const string BootstrapExtensionsMetadataName = "R3.SourceGenerators.ObservableEventsBootstrapExtensions";
+    private const string GeneratedNamespace = "R3.SourceGenerators";
 
     /// <summary>
-    /// Entry name: instance <c>source.FromEvents()</c> (extension method); static <c>ObservableEventsStatics.OBS_* .FromEvents</c> (property). Per-event streams are properties (ReactiveMarbles-style).
+    /// Entry name: instance <c>source.FromEvents()</c> (extension method under <c>R3.SourceGenerators</c>); static <c>ObservableEventsStatics.OBS_* .FromEvents</c> (property). Per-event streams are properties (ReactiveMarbles-style).
     /// </summary>
     private const string FromEventsEntryMethodName = "FromEvents";
 
@@ -41,13 +41,13 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         context.RegisterPostInitializationOutput(static ctx =>
         {
             ctx.AddSource(
-                "R3.ObservableEventsBootstrapExtensions.g.cs",
+                "R3.SourceGenerators.ObservableEventsBootstrapExtensions.g.cs",
                 SourceText.From(
                     StaticObservableEventsGenerationEnabled
                         ? GeneratorSources.ObservableEventsBootstrapExtensions
                         : GeneratorSources.ObservableEventsBootstrapExtensionsInstanceOnly,
                     Encoding.UTF8));
-            ctx.AddSource("R3.NullEvents.g.cs", SourceText.From(GeneratorSources.NullEvents, Encoding.UTF8));
+            ctx.AddSource("R3.SourceGenerators.NullEvents.g.cs", SourceText.From(GeneratorSources.NullEvents, Encoding.UTF8));
         });
         RegisterObservableEventsStaticsShellPostInit(context);
 
@@ -62,12 +62,12 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(inputs, static (spc, input) =>
         {
-            var targetTypes = CollectTargetTypes(input.Compilation, input.Candidates);
-            var allTypes = ExpandWithBaseTypes(targetTypes);
-            var allTypeSet = new HashSet<INamedTypeSymbol>(allTypes, SymbolEqualityComparer.Default);
-            foreach (var type in allTypes)
+            var targetTypes = CollectTargetTypes(input.Compilation, input.Candidates)
+                .OrderBy(static t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
+                .ToArray();
+            foreach (var type in targetTypes)
             {
-                var source = GenerateObservableSourceForType(type, allTypeSet, spc);
+                var source = GenerateObservableSourceForType(type, spc);
                 if (!string.IsNullOrWhiteSpace(source))
                 {
                     spc.AddSource($"{type.GetSafeHintName()}.FromEvents.g.cs", SourceText.From(source, Encoding.UTF8));
@@ -86,7 +86,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
         context.RegisterPostInitializationOutput(static ctx =>
             ctx.AddSource(
-                "R3.ObservableEventsStatics.g.cs",
+                "R3.SourceGenerators.ObservableEventsStatics.g.cs",
                 SourceText.From(GeneratorSources.ObservableEventsStaticsShell, Encoding.UTF8)));
 #pragma warning restore CS0162
     }
@@ -388,36 +388,40 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         }
     }
 
-    private static INamedTypeSymbol[] ExpandWithBaseTypes(INamedTypeSymbol[] targetTypes)
+    /// <summary>
+    /// Public instance events declared on <paramref name="type"/> and its non-generic class base types (excluding <see cref="object"/>),
+    /// with derived declarations taking precedence over the same event name on a base type.
+    /// </summary>
+    private static IEnumerable<IEventSymbol> GetPublicInstanceEventsFromTypeAndBases(INamedTypeSymbol type)
     {
-        var set = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-        foreach (var target in targetTypes)
+        var byName = new Dictionary<string, IEventSymbol>(System.StringComparer.Ordinal);
+        for (var current = type; current is not null; current = current.BaseType)
         {
-            for (var current = target; current is not null; current = current.BaseType)
+            if (current.SpecialType == SpecialType.System_Object)
             {
-                if (current.SpecialType == SpecialType.System_Object)
-                {
-                    break;
-                }
+                break;
+            }
 
-                if (current.TypeKind != TypeKind.Class || current.IsGenericType)
-                {
-                    continue;
-                }
+            if (current.TypeKind != TypeKind.Class || current.IsGenericType)
+            {
+                continue;
+            }
 
-                set.Add(current);
+            foreach (var evt in current.GetMembers().OfType<IEventSymbol>()
+                         .Where(static e => e is { IsStatic: false, DeclaredAccessibility: Accessibility.Public }))
+            {
+                if (!byName.ContainsKey(evt.Name))
+                {
+                    byName[evt.Name] = evt;
+                }
             }
         }
 
-        return set
-            .OrderBy(GetInheritanceDepth)
-            .ThenBy(static t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
-            .ToArray();
+        return byName.Values.OrderBy(static e => e.Name, System.StringComparer.Ordinal);
     }
 
     private static string GenerateObservableSourceForType(
         INamedTypeSymbol type,
-        HashSet<INamedTypeSymbol> allTypes,
         SourceProductionContext context)
     {
         var unit = SyntaxFactory.CompilationUnit()
@@ -427,7 +431,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         if (!type.IsStatic)
         {
             members.Add(CreateExtensionsClass(type));
-            members.Add(CreateWrapperClass(type, allTypes, context));
+            members.Add(CreateWrapperClass(type, context));
         }
 
         if (StaticObservableEventsGenerationEnabled && HasPublicStaticObservableEvents(type))
@@ -452,8 +456,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
     private static ClassDeclarationSyntax CreateExtensionsClass(INamedTypeSymbol type)
     {
         // Must match post-init class name in GeneratorSources.ObservableEventsBootstrapExtensions*:
-        // concrete FromEvents(this T) merges into the same partial as FromEvents<T>(this T) so the IDE
-        // resolves the specific overload (wrapper with event properties), not the generic NullEvents stub.
+        // concrete FromEvents(this T) merges into the same partial as FromEvents(this object?) so the IDE
+        // resolves the specific overload (wrapper with event properties), not the NullEvents fallback.
         return SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
             .AddModifiers(
                 SyntaxFactory.Token(SyntaxKind.InternalKeyword),
@@ -486,20 +490,10 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
     private static ClassDeclarationSyntax CreateWrapperClass(
         INamedTypeSymbol type,
-        HashSet<INamedTypeSymbol> allTypes,
         SourceProductionContext context)
     {
         var classDeclaration = SyntaxFactory.ClassDeclaration(GetWrapperName(type))
             .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword));
-
-        if (type.BaseType is { } baseType && allTypes.Contains(baseType))
-        {
-            classDeclaration = classDeclaration.WithBaseList(
-                SyntaxFactory.BaseList(
-                    SyntaxFactory.SingletonSeparatedList<BaseTypeSyntax>(
-                        SyntaxFactory.SimpleBaseType(
-                            SyntaxFactory.ParseTypeName(GetWrapperName(baseType))))));
-        }
 
         var senderType = SyntaxFactory.ParseTypeName(QualifiedType(type));
         var field = SyntaxFactory.FieldDeclaration(
@@ -514,19 +508,12 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .AddParameterListParameters(
                 SyntaxFactory.Parameter(SyntaxFactory.Identifier("sender"))
                     .WithType(senderType))
-            .WithInitializer(
-                type.BaseType is { } ctorBaseType && allTypes.Contains(ctorBaseType)
-                    ? SyntaxFactory.ConstructorInitializer(
-                        SyntaxKind.BaseConstructorInitializer,
-                        SyntaxFactory.ArgumentList(
-                            SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(SyntaxFactory.IdentifierName("sender")))))
-                    : null)
             .WithBody(
                 SyntaxFactory.Block(
                     SyntaxFactory.ParseStatement("_sender = sender;")));
 
         var members = new List<MemberDeclarationSyntax> { field, ctor };
-        foreach (var evt in type.GetMembers().OfType<IEventSymbol>().Where(static e => !e.IsStatic && e.DeclaredAccessibility == Accessibility.Public))
+        foreach (var evt in GetPublicInstanceEventsFromTypeAndBases(type))
         {
             var eventTarget = $"_sender.{evt.Name}";
             if (TryCreateEventObservableProperty(evt, eventTarget, context, out var eventProperty))
@@ -690,17 +677,6 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
         var tupleType = $"({string.Join(", ", parameters.Select(static p => QualifiedType(p.Type)))})";
         return $"global::R3.Observable<{tupleType}>";
-    }
-
-    private static int GetInheritanceDepth(INamedTypeSymbol type)
-    {
-        var depth = 0;
-        for (var current = type.BaseType; current is not null; current = current.BaseType)
-        {
-            depth++;
-        }
-
-        return depth;
     }
 
     private static string GetStaticObservableEventsNestedId(INamedTypeSymbol type) => $"OBS_{type.GetSafeHintName()}";
