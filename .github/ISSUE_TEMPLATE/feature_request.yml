@@ -36,9 +36,9 @@ body:
     attributes:
       label: Primary area
       options:
-        - ObservableEvents (FromEvent codegen)
+        - ObservableEvents / FromEvents() (FromEvent codegen)
         - R3Command / reactive command integration
-        - Static vs instance ObservableEvents entry points
+        - Static vs instance FromEvents() entry points
         - Diagnostics (R3SGxxxx)
         - NuGet / MSBuild / multi-Roslyn packaging
         - Samples / tests / CI

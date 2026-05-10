@@ -79,7 +79,7 @@ body:
     id: sample
     attributes:
       label: Minimal repro code or link
-      description: Paste a small snippet using `ObservableEvents()` / R3 (or link to a gist / branch). Redact secrets.
+      description: Paste a small snippet using `FromEvents()` / R3 (or link to a gist / branch). Redact secrets.
       render: csharp
 
   - type: checkboxes
