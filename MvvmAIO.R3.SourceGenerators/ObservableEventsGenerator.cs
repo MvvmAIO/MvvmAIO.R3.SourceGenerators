@@ -741,25 +741,41 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         out PropertyDeclarationSyntax property)
     {
         property = null!;
-        if (evt.Type is not INamedTypeSymbol delegateType)
+        if (evt.Type is not INamedTypeSymbol delegateType || delegateType.DelegateInvokeMethod is not IMethodSymbol invoke)
         {
             ReportInvalidFromEventHandlersDelegate(evt, context);
             return false;
         }
 
-        if (!IsClassicSystemEventHandler(delegateType, compilation, out var genericEventArgs))
+        if (!invoke.ReturnsVoid)
         {
             ReportInvalidFromEventHandlersDelegate(evt, context);
             return false;
         }
 
-        var expressionText = genericEventArgs is null
-            ? $"global::R3.Observable.FromEventHandler(h => {eventAccessorExpression} += h, h => {eventAccessorExpression} -= h, default)"
-            : $"global::R3.Observable.FromEventHandler<{QualifiedType(genericEventArgs)}>(h => {eventAccessorExpression} += h, h => {eventAccessorExpression} -= h, default)";
+        string expressionText;
+        string returnTypeStr;
 
-        var returnTypeStr = genericEventArgs is null
-            ? "global::R3.Observable<(object? sender, global::System.EventArgs e)>"
-            : $"global::R3.Observable<(object? sender, {QualifiedType(genericEventArgs)} e)>";
+        if (IsClassicSystemEventHandler(delegateType, compilation, out var genericEventArgs))
+        {
+            expressionText = genericEventArgs is null
+                ? $"global::R3.Observable.FromEventHandler(h => {eventAccessorExpression} += h, h => {eventAccessorExpression} -= h, default)"
+                : $"global::R3.Observable.FromEventHandler<{QualifiedType(genericEventArgs)}>(h => {eventAccessorExpression} += h, h => {eventAccessorExpression} -= h, default)";
+
+            returnTypeStr = genericEventArgs is null
+                ? "global::R3.Observable<(object? sender, global::System.EventArgs e)>"
+                : $"global::R3.Observable<(object? sender, {QualifiedType(genericEventArgs)} e)>";
+        }
+        else if (IsLegacySenderReceiverDelegate(delegateType, invoke, compilation))
+        {
+            expressionText = BuildSenderArgsTupleFromEventExpression(delegateType, invoke.Parameters, eventAccessorExpression);
+            returnTypeStr = GetFromEventHandlersSenderReceiverReturnType(invoke.Parameters);
+        }
+        else
+        {
+            ReportInvalidFromEventHandlersDelegate(evt, context);
+            return false;
+        }
 
         var eventCref = $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
         var docXml = SyntaxFactory.ParseLeadingTrivia(
@@ -773,6 +789,60 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 SyntaxFactory.ArrowExpressionClause(SyntaxFactory.ParseExpression(expressionText)))
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
         return true;
+    }
+
+    /// <summary>
+    /// Custom <c>void (object, TSecond)</c> delegate excluding <c>System.EventHandler</c> / <c>System.EventHandler&lt;T&gt;</c> (those use <c>Observable.FromEventHandler</c>), implemented with <c>R3.Observable.FromEvent</c>.
+    /// </summary>
+    private static bool IsLegacySenderReceiverDelegate(INamedTypeSymbol delegateType, IMethodSymbol invoke, Compilation compilation)
+    {
+        if (invoke.Parameters.Length != 2)
+        {
+            return false;
+        }
+
+        if (invoke.Parameters[0].RefKind != RefKind.None || invoke.Parameters[1].RefKind != RefKind.None)
+        {
+            return false;
+        }
+
+        if (!IsDeclaredObject(invoke.Parameters[0].Type, compilation))
+        {
+            return false;
+        }
+
+        if (IsClassicSystemEventHandler(delegateType, compilation, out _))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsDeclaredObject(ITypeSymbol type, Compilation compilation)
+    {
+        return SymbolEqualityComparer.Default.Equals(
+            type.WithNullableAnnotation(NullableAnnotation.None),
+            compilation.GetSpecialType(SpecialType.System_Object));
+    }
+
+    /// <remarks>Second generic argument to FromEvent uses both parameter types so the observable element is <c>(object, TSecond)</c>, surfaced as named <c>(object? sender, TSecond e)</c> on the property.</remarks>
+    private static string BuildSenderArgsTupleFromEventExpression(
+        INamedTypeSymbol delegateType,
+        ImmutableArray<IParameterSymbol> parameters,
+        string eventAccessorExpression)
+    {
+        var eventType = QualifiedType(delegateType);
+        var p0 = QualifiedType(parameters[0].Type);
+        var p1 = QualifiedType(parameters[1].Type);
+        return $"global::R3.Observable.FromEvent<{eventType}, ({p0}, {p1})>(h => (sender, e) => h((sender, e)), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, default)";
+    }
+
+    private static string GetFromEventHandlersSenderReceiverReturnType(ImmutableArray<IParameterSymbol> parameters)
+    {
+        var first = QualifiedType(parameters[0].Type);
+        var second = QualifiedType(parameters[1].Type);
+        return $"global::R3.Observable<({first} sender, {second} e)>";
     }
 
     /// <returns><see langword="null"/> for non-generic <c>System.EventHandler</c>; otherwise the generic event-args type.</returns>

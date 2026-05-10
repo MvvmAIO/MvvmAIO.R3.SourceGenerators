@@ -32,8 +32,8 @@ internal static class DiagnosticDescriptors
 
     public static readonly DiagnosticDescriptor InvalidFromEventHandlersDelegate = new(
         id: "R3SG2002",
-        title: "FromEventHandlers requires EventHandler pattern",
-        messageFormat: "The event '{0}' must use System.EventHandler or System.EventHandler<TEventArgs> for FromEventHandlers.",
+        title: "FromEventHandlers requires EventHandler or legacy object-sender delegate shape",
+        messageFormat: "The event '{0}' is unsupported for FromEventHandlers (needs System.EventHandler, System.EventHandler<T>, or void delegate with (object, T) parameters).",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
