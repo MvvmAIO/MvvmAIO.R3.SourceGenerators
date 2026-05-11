@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Must match the MvvmAIO.R3.SourceGenerators.Roslyn* project referenced by tests (Roslyn4120 → 4.12.0). -->
+    <MvvmAIOR3SourceGeneratorsTestsRoslynVersion>4.12.0</MvvmAIOR3SourceGeneratorsTestsRoslynVersion>
+  </PropertyGroup>
+</Project>

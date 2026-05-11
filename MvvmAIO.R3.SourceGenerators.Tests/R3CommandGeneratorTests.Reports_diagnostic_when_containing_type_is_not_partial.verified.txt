@@ -1,0 +1,15 @@
+﻿Diagnostics:
+  R3SG0001: The type 'ShellViewModel' must be declared partial for source generation.
+
+Generated Sources:
+--- MvvmAIO.R3.R3CommandAttribute.g.cs ---
+using System;
+
+namespace MvvmAIO.R3
+{
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class R3CommandAttribute : Attribute
+{
+    public string? CommandName { get; set; }
+}
+}

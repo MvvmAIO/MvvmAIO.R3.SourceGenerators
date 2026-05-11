@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Tests/">
+    <Project Path="MvvmAIO.R3.SourceGenerators.Tests/MvvmAIO.R3.SourceGenerators.Tests.csproj" />
+  </Folder>
   <Project Path="MvvmAIO.R3.SourceGenerators.Roslyn4031/MvvmAIO.R3.SourceGenerators.Roslyn4031.csproj" />
   <Project Path="MvvmAIO.R3.SourceGenerators.Roslyn4120/MvvmAIO.R3.SourceGenerators.Roslyn4120.csproj" />
   <Project Path="MvvmAIO.R3.SourceGenerators.Roslyn5000/MvvmAIO.R3.SourceGenerators.Roslyn5000.csproj" />

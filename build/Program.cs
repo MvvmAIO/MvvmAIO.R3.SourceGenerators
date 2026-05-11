@@ -79,6 +79,16 @@ sealed class Build : NukeBuild
                 .EnableSkipDuplicate());
         });
 
+    Target UnitTest => _ => _
+        .DependsOn(Compile)
+        .Executes(() =>
+        {
+            DotNetTest(s => s
+                .SetProjectFile(SolutionFile)
+                .SetConfiguration(Configuration)
+                .EnableNoBuild());
+        });
+
     Target Ci => _ => _
-        .DependsOn(Compile);
+        .DependsOn(UnitTest);
 }

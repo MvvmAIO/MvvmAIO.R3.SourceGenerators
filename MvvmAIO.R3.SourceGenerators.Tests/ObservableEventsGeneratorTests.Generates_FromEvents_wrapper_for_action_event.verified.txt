@@ -1,0 +1,65 @@
+﻿Diagnostics:
+  <none>
+
+Generated Sources:
+--- Demo_ClickSource.FromEvents.g.cs ---
+#nullable enable
+
+using R3;
+
+namespace R3.SourceGenerators;
+internal static partial class ObservableEventsBootstrapExtensions
+{
+    public static Demo_ClickSourceFromEventObservable FromEvents(this global::Demo.ClickSource source) => new Demo_ClickSourceFromEventObservable(source);
+}
+
+internal class Demo_ClickSourceFromEventObservable
+{
+    private readonly global::Demo.ClickSource _sender;
+    internal Demo_ClickSourceFromEventObservable(global::Demo.ClickSource sender)
+    {
+        _sender = sender;
+    }
+
+    /// <summary>
+    /// <inheritdoc cref = "global::Demo.ClickSource.Click"/>
+    /// </summary>
+    public global::R3.Observable<global::R3.Unit> Click => global::R3.Observable.FromEvent<global::System.Action?, global::R3.Unit>(h => () => h(global::R3.Unit.Default), e => _sender.Click += e, e => _sender.Click -= e, default);
+}
+
+--- R3.SourceGenerators.NullEvents.g.cs ---
+#nullable enable
+namespace R3.SourceGenerators
+{
+internal struct NullEvents
+{
+}
+}
+
+--- R3.SourceGenerators.ObservableEventsBootstrapExtensions.g.cs ---
+#nullable enable
+namespace R3.SourceGenerators
+{
+internal static partial class ObservableEventsBootstrapExtensions
+{
+    public static NullEvents FromEvents(this object? source)
+    {
+        return default;
+    }
+
+    public static NullEvents FromEventHandlers(this object? source)
+    {
+        return default;
+    }
+
+    public static NullEvents FromRoutedEvents(this object? source)
+    {
+        return default;
+    }
+
+    public static NullEvents FromRoutedEventHandlers(this object? source)
+    {
+        return default;
+    }
+}
+}
