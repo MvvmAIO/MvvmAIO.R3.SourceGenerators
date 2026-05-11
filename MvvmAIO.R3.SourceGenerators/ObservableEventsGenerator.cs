@@ -37,6 +37,9 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
     /// </summary>
     private const string FromRoutedEventHandlersEntryMethodName = "FromRoutedEventHandlers";
 
+    private const string FromAttachedRoutedEventEntryMethodName = "FromAttachedRoutedEvent";
+    private const string FromAttachedRoutedEventHandlerEntryMethodName = "FromAttachedRoutedEventHandler";
+
     /// <summary>
     /// When <see langword="false"/>, no <c>ObservableEventsStatics</c> / <c>OBS_*</c> / static-event wrappers are emitted and static <c>FromEvents</c> member accesses are not discovered.
     /// </summary>
@@ -48,6 +51,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         FromEventHandlers,
         FromRoutedEvents,
         FromRoutedEventHandlers,
+        FromAttachedRoutedEvent,
+        FromAttachedRoutedEventHandler,
     }
 
     /// <summary>
@@ -98,7 +103,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             var targets = CollectObservableEventTargets(input.Compilation, input.Candidates, input.UseWpf);
             foreach (var type in targets.FromEventsTypes)
             {
-                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromEvents);
+                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromEvents, input.UseWpf);
                 if (!string.IsNullOrWhiteSpace(source))
                 {
                     spc.AddSource($"{type.GetSafeHintName()}.FromEvents.g.cs", SourceText.From(source, Encoding.UTF8));
@@ -107,7 +112,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
             foreach (var type in targets.FromEventHandlersTypes)
             {
-                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromEventHandlers);
+                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromEventHandlers, input.UseWpf);
                 if (!string.IsNullOrWhiteSpace(source))
                 {
                     spc.AddSource($"{type.GetSafeHintName()}.FromEventHandlers.g.cs", SourceText.From(source, Encoding.UTF8));
@@ -116,7 +121,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
             foreach (var type in targets.FromRoutedEventsTypes)
             {
-                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromRoutedEvents);
+                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromRoutedEvents, input.UseWpf);
                 if (!string.IsNullOrWhiteSpace(source))
                 {
                     spc.AddSource($"{type.GetSafeHintName()}.FromRoutedEvents.g.cs", SourceText.From(source, Encoding.UTF8));
@@ -125,10 +130,28 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
             foreach (var type in targets.FromRoutedEventHandlersTypes)
             {
-                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromRoutedEventHandlers);
+                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromRoutedEventHandlers, input.UseWpf);
                 if (!string.IsNullOrWhiteSpace(source))
                 {
                     spc.AddSource($"{type.GetSafeHintName()}.FromRoutedEventHandlers.g.cs", SourceText.From(source, Encoding.UTF8));
+                }
+            }
+
+            foreach (var target in targets.FromAttachedRoutedEventsTypes)
+            {
+                var source = GenerateAttachedRoutedEventSourceForTarget(target, ObservableEventsEntryKind.FromAttachedRoutedEvent);
+                if (!string.IsNullOrWhiteSpace(source))
+                {
+                    spc.AddSource($"{target.ReceiverType.GetSafeHintName()}.FromAttachedRoutedEvent.g.cs", SourceText.From(source, Encoding.UTF8));
+                }
+            }
+
+            foreach (var target in targets.FromAttachedRoutedEventHandlersTypes)
+            {
+                var source = GenerateAttachedRoutedEventSourceForTarget(target, ObservableEventsEntryKind.FromAttachedRoutedEventHandler);
+                if (!string.IsNullOrWhiteSpace(source))
+                {
+                    spc.AddSource($"{target.ReceiverType.GetSafeHintName()}.FromAttachedRoutedEventHandler.g.cs", SourceText.From(source, Encoding.UTF8));
                 }
             }
         });
@@ -166,7 +189,9 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         return methodName is FromEventsEntryMethodName
             or FromEventHandlersEntryMethodName
             or FromRoutedEventsEntryMethodName
-            or FromRoutedEventHandlersEntryMethodName;
+            or FromRoutedEventHandlersEntryMethodName
+            or FromAttachedRoutedEventEntryMethodName
+            or FromAttachedRoutedEventHandlerEntryMethodName;
     }
 
     /// <summary>
@@ -214,18 +239,34 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ImmutableArray<INamedTypeSymbol> fromEventsTypes,
             ImmutableArray<INamedTypeSymbol> fromEventHandlersTypes,
             ImmutableArray<INamedTypeSymbol> fromRoutedEventsTypes,
-            ImmutableArray<INamedTypeSymbol> fromRoutedEventHandlersTypes)
+            ImmutableArray<INamedTypeSymbol> fromRoutedEventHandlersTypes,
+            ImmutableArray<AttachedRoutedEventTarget> fromAttachedRoutedEventsTypes,
+            ImmutableArray<AttachedRoutedEventTarget> fromAttachedRoutedEventHandlersTypes)
         {
             FromEventsTypes = fromEventsTypes;
             FromEventHandlersTypes = fromEventHandlersTypes;
             FromRoutedEventsTypes = fromRoutedEventsTypes;
             FromRoutedEventHandlersTypes = fromRoutedEventHandlersTypes;
+            FromAttachedRoutedEventsTypes = fromAttachedRoutedEventsTypes;
+            FromAttachedRoutedEventHandlersTypes = fromAttachedRoutedEventHandlersTypes;
         }
 
         public ImmutableArray<INamedTypeSymbol> FromEventsTypes { get; }
         public ImmutableArray<INamedTypeSymbol> FromEventHandlersTypes { get; }
         public ImmutableArray<INamedTypeSymbol> FromRoutedEventsTypes { get; }
         public ImmutableArray<INamedTypeSymbol> FromRoutedEventHandlersTypes { get; }
+        public ImmutableArray<AttachedRoutedEventTarget> FromAttachedRoutedEventsTypes { get; }
+        public ImmutableArray<AttachedRoutedEventTarget> FromAttachedRoutedEventHandlersTypes { get; }
+    }
+
+    private readonly struct AttachedRoutedEventTarget
+    {
+        public AttachedRoutedEventTarget(INamedTypeSymbol receiverType)
+        {
+            ReceiverType = receiverType;
+        }
+
+        public INamedTypeSymbol ReceiverType { get; }
     }
 
     private static ObservableEventTargetSets CollectObservableEventTargets(
@@ -240,13 +281,19 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 ImmutableArray<INamedTypeSymbol>.Empty,
                 ImmutableArray<INamedTypeSymbol>.Empty,
                 ImmutableArray<INamedTypeSymbol>.Empty,
-                ImmutableArray<INamedTypeSymbol>.Empty);
+                ImmutableArray<INamedTypeSymbol>.Empty,
+                ImmutableArray<AttachedRoutedEventTarget>.Empty,
+                ImmutableArray<AttachedRoutedEventTarget>.Empty);
         }
 
         var fromEvents = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromRoutedEvents = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromRoutedHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var fromAttachedRoutedEvents = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var fromAttachedRoutedHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var useAvalonia = compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent`1") is not null
+            || compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent") is not null;
 
         foreach (var candidate in candidates)
         {
@@ -287,7 +334,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
                         fromHandlers.Add(handlerTarget);
                     }
-                    else if (useWpf
+                    else if ((useWpf || useAvalonia)
                              && methodSymbol.Name == FromRoutedEventsEntryMethodName
                              && TryGetBootstrapObservableEventsExtensionTarget(
                                  invocation,
@@ -304,7 +351,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
                         fromRoutedEvents.Add(routedEventsTarget);
                     }
-                    else if (useWpf
+                    else if ((useWpf || useAvalonia)
                              && methodSymbol.Name == FromRoutedEventHandlersEntryMethodName
                              && TryGetBootstrapObservableEventsExtensionTarget(
                                  invocation,
@@ -320,6 +367,38 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                         }
 
                         fromRoutedHandlers.Add(routedHandlersTarget);
+                    }
+                    else if (methodSymbol.Name == FromAttachedRoutedEventEntryMethodName
+                             && TryGetBootstrapAttachedRoutedEventTarget(
+                                 invocation,
+                                 semanticModel,
+                                 methodSymbol,
+                                 bootstrapType,
+                                 FromAttachedRoutedEventEntryMethodName,
+                                 out var attachedEventsReceiver))
+                    {
+                        if (attachedEventsReceiver.IsGenericType)
+                        {
+                            attachedEventsReceiver = attachedEventsReceiver.OriginalDefinition;
+                        }
+
+                        fromAttachedRoutedEvents.Add(attachedEventsReceiver);
+                    }
+                    else if (methodSymbol.Name == FromAttachedRoutedEventHandlerEntryMethodName
+                             && TryGetBootstrapAttachedRoutedEventTarget(
+                                 invocation,
+                                 semanticModel,
+                                 methodSymbol,
+                                 bootstrapType,
+                                 FromAttachedRoutedEventHandlerEntryMethodName,
+                                 out var attachedHandlersReceiver))
+                    {
+                        if (attachedHandlersReceiver.IsGenericType)
+                        {
+                            attachedHandlersReceiver = attachedHandlersReceiver.OriginalDefinition;
+                        }
+
+                        fromAttachedRoutedHandlers.Add(attachedHandlersReceiver);
                     }
                 }
 
@@ -361,11 +440,19 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 .OrderBy(static t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
                 .ToImmutableArray();
 
+        static ImmutableArray<AttachedRoutedEventTarget> OrderAttached(System.Collections.Generic.HashSet<INamedTypeSymbol> set) =>
+            set
+                .OrderBy(static t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
+                .Select(static t => new AttachedRoutedEventTarget(t))
+                .ToImmutableArray();
+
         return new ObservableEventTargetSets(
             Order(fromEvents),
             Order(fromHandlers),
             Order(fromRoutedEvents),
-            Order(fromRoutedHandlers));
+            Order(fromRoutedHandlers),
+            OrderAttached(fromAttachedRoutedEvents),
+            OrderAttached(fromAttachedRoutedHandlers));
     }
 
     /// <summary>
@@ -443,6 +530,42 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 namedType = receiverNamed;
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetBootstrapAttachedRoutedEventTarget(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol bootstrapType,
+        string entryMethodName,
+        out INamedTypeSymbol receiverType)
+    {
+        receiverType = null!;
+
+        if (!string.Equals(methodSymbol.Name, entryMethodName, System.StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var declaration = methodSymbol.ReducedFrom ?? methodSymbol;
+        if (declaration.ContainingType?.OriginalDefinition is not { } declaring
+            || !SymbolEqualityComparer.Default.Equals(declaring, bootstrapType.OriginalDefinition))
+        {
+            return false;
+        }
+
+        if (invocation.Expression is not MemberAccessExpressionSyntax { Expression: ExpressionSyntax receiver })
+        {
+            return false;
+        }
+
+        if (semanticModel.GetTypeInfo(receiver).Type is INamedTypeSymbol receiverNamed)
+        {
+            receiverType = receiverNamed;
+            return true;
         }
 
         return false;
@@ -589,7 +712,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         INamedTypeSymbol type,
         Compilation compilation,
         SourceProductionContext context,
-        ObservableEventsEntryKind entryKind)
+        ObservableEventsEntryKind entryKind,
+        bool useWpf)
     {
         var unit = SyntaxFactory.CompilationUnit()
             .AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("R3")));
@@ -598,7 +722,13 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         if (!type.IsStatic)
         {
             members.Add(CreateExtensionsClass(type, entryKind));
-            members.Add(CreateWrapperClass(type, compilation, context, entryKind));
+            members.Add(CreateWrapperClass(type, compilation, context, entryKind, useWpf));
+            if (entryKind is ObservableEventsEntryKind.FromRoutedEvents or ObservableEventsEntryKind.FromRoutedEventHandlers
+                && HasAvaloniaRoutedClrEvents(type, compilation))
+            {
+                members.Add(CreateAvaloniaRoutedExtensionsClass(type, entryKind));
+                members.Add(CreateAvaloniaRoutedWrapperClass(type, compilation, context, entryKind));
+            }
         }
 
         // Static OBS_* codegen stays paired with instance FromEvents only (same lookup semantics today).
@@ -621,6 +751,43 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
         // Analyzer-generated translation units require an explicit `#nullable` directive before NRT punctuation (CS8669).
         return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string GenerateAttachedRoutedEventSourceForTarget(
+        AttachedRoutedEventTarget target,
+        ObservableEventsEntryKind entryKind)
+    {
+        var receiverType = QualifiedType(target.ReceiverType);
+        var observableMethod = entryKind == ObservableEventsEntryKind.FromAttachedRoutedEvent
+            ? FromAttachedRoutedEventEntryMethodName
+            : FromAttachedRoutedEventHandlerEntryMethodName;
+        var returnType = entryKind == ObservableEventsEntryKind.FromAttachedRoutedEvent
+            ? "global::R3.Observable<TEventArgs>"
+            : "global::R3.Observable<(object? sender, TEventArgs e)>";
+        var expression = entryKind == ObservableEventsEntryKind.FromAttachedRoutedEvent
+            ? "global::R3.Observable.FromEvent<global::System.EventHandler<TEventArgs>, TEventArgs>(h => (sender, e) => h(e), h => source.AddHandler(routedEvent, h, routes, handledEventsToo), h => source.RemoveHandler(routedEvent, h), default)"
+            : "global::R3.Observable.FromEventHandler<TEventArgs>(h => source.AddHandler(routedEvent, h, routes, handledEventsToo), h => source.RemoveHandler(routedEvent, h), default)";
+
+        var source = $$"""
+            #nullable enable
+
+            using R3;
+
+            namespace R3.SourceGenerators;
+
+            internal static partial class ObservableEventsBootstrapExtensions
+            {
+                public static {{returnType}} {{observableMethod}}<TEventArgs>(
+                    this {{receiverType}} source,
+                    global::Avalonia.Interactivity.RoutedEvent<TEventArgs> routedEvent,
+                    global::Avalonia.Interactivity.RoutingStrategies routes = global::Avalonia.Interactivity.RoutingStrategies.Direct | global::Avalonia.Interactivity.RoutingStrategies.Bubble,
+                    bool handledEventsToo = false)
+                    where TEventArgs : global::Avalonia.Interactivity.RoutedEventArgs
+                    => {{expression}};
+            }
+            """;
+
+        return source;
     }
 
     private static ClassDeclarationSyntax CreateExtensionsClass(INamedTypeSymbol type, ObservableEventsEntryKind entryKind)
@@ -732,11 +899,34 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
     }
 
+    private static ClassDeclarationSyntax CreateAvaloniaRoutedExtensionsClass(INamedTypeSymbol type, ObservableEventsEntryKind entryKind)
+    {
+        var methodName = entryKind == ObservableEventsEntryKind.FromRoutedEvents
+            ? FromRoutedEventsEntryMethodName
+            : FromRoutedEventHandlersEntryMethodName;
+        var wrapperName = GetAvaloniaRoutedWrapperName(type, entryKind);
+        var methodSource = $$"""
+            public static {{wrapperName}} {{methodName}}(
+                this {{QualifiedType(type)}} source,
+                global::Avalonia.Interactivity.RoutingStrategies routes,
+                bool handledEventsToo = false)
+                => new {{wrapperName}}(source, routes, handledEventsToo);
+            """;
+
+        return SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.InternalKeyword),
+                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                SyntaxFactory.Token(SyntaxKind.PartialKeyword))
+            .AddMembers(SyntaxFactory.ParseMemberDeclaration(methodSource)!);
+    }
+
     private static ClassDeclarationSyntax CreateWrapperClass(
         INamedTypeSymbol type,
         Compilation compilation,
         SourceProductionContext context,
-        ObservableEventsEntryKind entryKind)
+        ObservableEventsEntryKind entryKind,
+        bool useWpf)
     {
         var wrapperName = GetWrapperName(type, entryKind);
         var classDeclaration = SyntaxFactory.ClassDeclaration(wrapperName)
@@ -764,7 +954,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         {
             if (entryKind is ObservableEventsEntryKind.FromRoutedEvents or ObservableEventsEntryKind.FromRoutedEventHandlers)
             {
-                if (!IsWpfRoutedClrEvent(evt, compilation))
+                if (!IsRoutedClrEvent(evt, compilation, useWpf))
                 {
                     continue;
                 }
@@ -787,17 +977,66 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         return classDeclaration.AddMembers(members.ToArray());
     }
 
-    /// <summary>
-    /// WPF instance events backed by a static <c>System.Windows.RoutedEvent</c> field named <c>{event}Event</c> on the declaring type or a base class.
-    /// </summary>
-    private static bool IsWpfRoutedClrEvent(IEventSymbol evt, Compilation compilation)
+    private static ClassDeclarationSyntax CreateAvaloniaRoutedWrapperClass(
+        INamedTypeSymbol type,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
     {
-        var routedEventType = compilation.GetTypeByMetadataName("System.Windows.RoutedEvent");
-        if (routedEventType is null)
+        var wrapperName = GetAvaloniaRoutedWrapperName(type, entryKind);
+        var members = new List<string>
         {
-            return false;
+            $"private readonly {QualifiedType(type)} _sender;",
+            "private readonly global::Avalonia.Interactivity.RoutingStrategies _routes;",
+            "private readonly bool _handledEventsToo;",
+            $$"""
+            internal {{wrapperName}}({{QualifiedType(type)}} sender, global::Avalonia.Interactivity.RoutingStrategies routes, bool handledEventsToo)
+            {
+                _sender = sender;
+                _routes = routes;
+                _handledEventsToo = handledEventsToo;
+            }
+            """,
+        };
+
+        foreach (var evt in GetPublicInstanceEventsFromTypeAndBases(type))
+        {
+            if (!TryGetAvaloniaRoutedClrEventField(evt, compilation, out var routedEventField, out var eventArgsType))
+            {
+                continue;
+            }
+
+            var propertySource = entryKind == ObservableEventsEntryKind.FromRoutedEvents
+                ? CreateAvaloniaRoutedEventObservablePropertySource(evt, routedEventField, eventArgsType, context)
+                : CreateAvaloniaRoutedEventHandlerObservablePropertySource(evt, routedEventField, eventArgsType, context);
+            if (!string.IsNullOrWhiteSpace(propertySource))
+            {
+                members.Add(propertySource);
+            }
         }
 
+        var classSource = $$"""
+            internal class {{wrapperName}}
+            {
+            {{IndentMembers(members)}}
+            }
+            """;
+
+        return (ClassDeclarationSyntax)SyntaxFactory.ParseMemberDeclaration(classSource)!;
+    }
+
+    private static string IndentMembers(IEnumerable<string> members)
+    {
+        return string.Join(
+            "\n\n",
+            members.Select(static member => string.Join(
+                "\n",
+                member.Trim().Split(new[] { "\r\n", "\n" }, System.StringSplitOptions.None)
+                    .Select(static line => "    " + line))));
+    }
+
+    private static bool IsRoutedClrEvent(IEventSymbol evt, Compilation compilation, bool includeWpf)
+    {
         var fieldName = evt.Name + "Event";
         for (var current = evt.ContainingType; current is not null; current = current.BaseType)
         {
@@ -814,7 +1053,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 }
 
                 var fieldType = field.Type.WithNullableAnnotation(NullableAnnotation.None);
-                if (SymbolEqualityComparer.Default.Equals(fieldType, routedEventType))
+                if ((includeWpf && IsWpfRoutedEventType(fieldType, compilation))
+                    || IsAvaloniaRoutedEventType(fieldType, compilation))
                 {
                     return true;
                 }
@@ -822,6 +1062,113 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         }
 
         return false;
+    }
+
+    private static bool HasAvaloniaRoutedClrEvents(INamedTypeSymbol type, Compilation compilation)
+    {
+        return GetPublicInstanceEventsFromTypeAndBases(type)
+            .Any(evt => TryGetAvaloniaRoutedClrEventField(evt, compilation, out _, out _));
+    }
+
+    private static bool TryGetAvaloniaRoutedClrEventField(
+        IEventSymbol evt,
+        Compilation compilation,
+        out IFieldSymbol routedEventField,
+        out INamedTypeSymbol eventArgsType)
+    {
+        routedEventField = null!;
+        eventArgsType = null!;
+
+        var routedEventType = compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent`1");
+        if (routedEventType is null)
+        {
+            return false;
+        }
+
+        var fieldName = evt.Name + "Event";
+        for (var current = evt.ContainingType; current is not null; current = current.BaseType)
+        {
+            if (current.SpecialType == SpecialType.System_Object)
+            {
+                break;
+            }
+
+            foreach (var member in current.GetMembers(fieldName))
+            {
+                if (member is not IFieldSymbol field
+                    || !field.IsStatic
+                    || field.IsImplicitlyDeclared
+                    || field.Type is not INamedTypeSymbol fieldType
+                    || !SymbolEqualityComparer.Default.Equals(fieldType.OriginalDefinition, routedEventType)
+                    || fieldType.TypeArguments.Length != 1
+                    || fieldType.TypeArguments[0] is not INamedTypeSymbol argsType)
+                {
+                    continue;
+                }
+
+                routedEventField = field;
+                eventArgsType = argsType;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string CreateAvaloniaRoutedEventObservablePropertySource(
+        IEventSymbol evt,
+        IFieldSymbol routedEventField,
+        INamedTypeSymbol eventArgsType,
+        SourceProductionContext context)
+    {
+        var eventArgs = QualifiedType(eventArgsType);
+        var eventField = $"{QualifiedType(routedEventField.ContainingType)}.{routedEventField.Name}";
+        var eventCref = $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
+        return $$"""
+            /// <summary>
+            /// <inheritdoc cref="{{eventCref}}" />
+            /// </summary>
+            public global::R3.Observable<{{eventArgs}}> {{evt.Name}} => global::R3.Observable.FromEvent<global::System.EventHandler<{{eventArgs}}>, {{eventArgs}}>(h => (sender, e) => h(e), h => _sender.AddHandler({{eventField}}, h, _routes, _handledEventsToo), h => _sender.RemoveHandler({{eventField}}, h), default);
+            """;
+    }
+
+    private static string CreateAvaloniaRoutedEventHandlerObservablePropertySource(
+        IEventSymbol evt,
+        IFieldSymbol routedEventField,
+        INamedTypeSymbol eventArgsType,
+        SourceProductionContext context)
+    {
+        var eventArgs = QualifiedType(eventArgsType);
+        var eventField = $"{QualifiedType(routedEventField.ContainingType)}.{routedEventField.Name}";
+        var eventCref = $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
+        return $$"""
+            /// <summary>
+            /// <inheritdoc cref="{{eventCref}}" />
+            /// </summary>
+            public global::R3.Observable<(object? sender, {{eventArgs}} e)> {{evt.Name}} => global::R3.Observable.FromEventHandler<{{eventArgs}}>(h => _sender.AddHandler({{eventField}}, h, _routes, _handledEventsToo), h => _sender.RemoveHandler({{eventField}}, h), default);
+            """;
+    }
+
+    private static bool IsWpfRoutedEventType(ITypeSymbol type, Compilation compilation)
+    {
+        var routedEventType = compilation.GetTypeByMetadataName("System.Windows.RoutedEvent");
+        return routedEventType is not null
+            && SymbolEqualityComparer.Default.Equals(type.WithNullableAnnotation(NullableAnnotation.None), routedEventType);
+    }
+
+    private static bool IsAvaloniaRoutedEventType(ITypeSymbol type, Compilation compilation)
+    {
+        var nonGeneric = compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent");
+        if (nonGeneric is not null
+            && SymbolEqualityComparer.Default.Equals(type.WithNullableAnnotation(NullableAnnotation.None), nonGeneric))
+        {
+            return true;
+        }
+
+        var generic = compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent`1");
+        return generic is not null
+            && type is INamedTypeSymbol named
+            && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, generic);
     }
 
     private static bool HasPublicStaticObservableEvents(INamedTypeSymbol type)
@@ -1129,6 +1476,14 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ObservableEventsEntryKind.FromEventHandlers => $"{GetTypeUniqueIdentifier(type)}FromEventHandlerObservable",
             ObservableEventsEntryKind.FromRoutedEvents => $"{GetTypeUniqueIdentifier(type)}FromRoutedEventObservable",
             ObservableEventsEntryKind.FromRoutedEventHandlers => $"{GetTypeUniqueIdentifier(type)}FromRoutedEventHandlerObservable",
+            _ => throw new System.ArgumentOutOfRangeException(nameof(entryKind)),
+        };
+
+    private static string GetAvaloniaRoutedWrapperName(INamedTypeSymbol type, ObservableEventsEntryKind entryKind) =>
+        entryKind switch
+        {
+            ObservableEventsEntryKind.FromRoutedEvents => $"{GetTypeUniqueIdentifier(type)}FromAvaloniaRoutedEventObservable",
+            ObservableEventsEntryKind.FromRoutedEventHandlers => $"{GetTypeUniqueIdentifier(type)}FromAvaloniaRoutedEventHandlerObservable",
             _ => throw new System.ArgumentOutOfRangeException(nameof(entryKind)),
         };
 

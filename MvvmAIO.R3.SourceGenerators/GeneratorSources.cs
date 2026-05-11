@@ -36,7 +36,27 @@ internal static partial class ObservableEventsBootstrapExtensions
         return default;
     }
 
+    public static NullEvents FromRoutedEvents(this object? source, object? routes, bool handledEventsToo = false)
+    {
+        return default;
+    }
+
     public static NullEvents FromRoutedEventHandlers(this object? source)
+    {
+        return default;
+    }
+
+    public static NullEvents FromRoutedEventHandlers(this object? source, object? routes, bool handledEventsToo = false)
+    {
+        return default;
+    }
+
+    public static NullEvents FromAttachedRoutedEvent(this object? source, object? routedEvent, object? routes = null, bool handledEventsToo = false)
+    {
+        return default;
+    }
+
+    public static NullEvents FromAttachedRoutedEventHandler(this object? source, object? routedEvent, object? routes = null, bool handledEventsToo = false)
     {
         return default;
     }
@@ -75,7 +95,27 @@ internal static partial class ObservableEventsBootstrapExtensions
         return default;
     }
 
+    public static NullEvents FromRoutedEvents(this object? source, object? routes, bool handledEventsToo = false)
+    {
+        return default;
+    }
+
     public static NullEvents FromRoutedEventHandlers(this object? source)
+    {
+        return default;
+    }
+
+    public static NullEvents FromRoutedEventHandlers(this object? source, object? routes, bool handledEventsToo = false)
+    {
+        return default;
+    }
+
+    public static NullEvents FromAttachedRoutedEvent(this object? source, object? routedEvent, object? routes = null, bool handledEventsToo = false)
+    {
+        return default;
+    }
+
+    public static NullEvents FromAttachedRoutedEventHandler(this object? source, object? routedEvent, object? routes = null, bool handledEventsToo = false)
     {
         return default;
     }
