@@ -4,8 +4,28 @@
     <MvvmAIOR3SourceGeneratorsImportAnalyzers Condition="'$(MvvmAIOR3SourceGeneratorsImportAnalyzers)' == ''">true</MvvmAIOR3SourceGeneratorsImportAnalyzers>
   </PropertyGroup>
 
+  <Choose>
+    <When Condition="'$(MvvmAIOR3SourceGeneratorsImportAnalyzers)' == 'true'">
+      <PropertyGroup>
+        <_MvvmAIOR3SourceGeneratorsCscPath>$(CscToolPath)$(CscToolExe)</_MvvmAIOR3SourceGeneratorsCscPath>
+        <_MvvmAIOR3SourceGeneratorsCscVersion Condition="Exists('$(_MvvmAIOR3SourceGeneratorsCscPath)')">$([System.Diagnostics.FileVersionInfo]::GetVersionInfo('$(_MvvmAIOR3SourceGeneratorsCscPath)').FileVersion)</_MvvmAIOR3SourceGeneratorsCscVersion>
+        <_MvvmAIOR3SourceGeneratorsCscMajor Condition="'$(_MvvmAIOR3SourceGeneratorsCscVersion)' != ''">$([System.Version]::Parse('$(_MvvmAIOR3SourceGeneratorsCscVersion)').Major)</_MvvmAIOR3SourceGeneratorsCscMajor>
+        <_MvvmAIOR3SourceGeneratorsCscMinor Condition="'$(_MvvmAIOR3SourceGeneratorsCscVersion)' != ''">$([System.Version]::Parse('$(_MvvmAIOR3SourceGeneratorsCscVersion)').Minor)</_MvvmAIOR3SourceGeneratorsCscMinor>
+        <_MvvmAIOR3SourceGeneratorsAnalyzerDir Condition="'$(_MvvmAIOR3SourceGeneratorsAnalyzerDir)' == '' and '$(_MvvmAIOR3SourceGeneratorsCscMajor)' == '4' and '$(_MvvmAIOR3SourceGeneratorsCscMinor)' != '' and '$(_MvvmAIOR3SourceGeneratorsCscMinor)' &lt;= '3'">roslyn4.3</_MvvmAIOR3SourceGeneratorsAnalyzerDir>
+        <_MvvmAIOR3SourceGeneratorsAnalyzerDir Condition="'$(_MvvmAIOR3SourceGeneratorsAnalyzerDir)' == '' and '$(_MvvmAIOR3SourceGeneratorsCscMajor)' == '4'">roslyn4.12</_MvvmAIOR3SourceGeneratorsAnalyzerDir>
+        <_MvvmAIOR3SourceGeneratorsAnalyzerDir Condition="'$(_MvvmAIOR3SourceGeneratorsAnalyzerDir)' == '' and '$(_MvvmAIOR3SourceGeneratorsCscMajor)' != '' and '$(_MvvmAIOR3SourceGeneratorsCscMajor)' &gt;= '5'">roslyn5.0</_MvvmAIOR3SourceGeneratorsAnalyzerDir>
+        <_MvvmAIOR3SourceGeneratorsAnalyzerDir Condition="'$(_MvvmAIOR3SourceGeneratorsAnalyzerDir)' == ''">roslyn4.12</_MvvmAIOR3SourceGeneratorsAnalyzerDir>
+      </PropertyGroup>
+    </When>
+  </Choose>
+
+  <ItemGroup>
+    <!-- Routed-event entry points read UseWPF in the source generator (WPF-only codegen). -->
+    <CompilerVisibleProperty Include="UseWPF" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(MvvmAIOR3SourceGeneratorsImportAnalyzers)' == 'true' and '$(MvvmAIOR3SourceGeneratorsAnalyzerAdded)' != 'true'">
-    <Analyzer Include="$(MSBuildThisFileDirectory)..\analyzers\dotnet\cs\MvvmAIO.R3.SourceGenerators.dll" />
+    <Analyzer Include="$(MSBuildThisFileDirectory)..\analyzers\dotnet\$(_MvvmAIOR3SourceGeneratorsAnalyzerDir)\cs\MvvmAIO.R3.SourceGenerators.dll" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(MvvmAIOR3SourceGeneratorsImportAnalyzers)' == 'true'">

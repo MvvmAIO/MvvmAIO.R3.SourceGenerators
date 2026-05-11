@@ -25,7 +25,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.102" PrivateAssets="all" />
-    <ProjectReference Include="..\MvvmAIO.R3.SourceGenerators\MvvmAIO.R3.SourceGenerators.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\MvvmAIO.R3.SourceGenerators.Roslyn4031\MvvmAIO.R3.SourceGenerators.Roslyn4031.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\MvvmAIO.R3.SourceGenerators.Roslyn4120\MvvmAIO.R3.SourceGenerators.Roslyn4120.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\MvvmAIO.R3.SourceGenerators.Roslyn5000\MvvmAIO.R3.SourceGenerators.Roslyn5000.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,12 +37,16 @@
     <None Include="build\MvvmAIO.R3.SourceGenerators.props" Pack="true" PackagePath="buildTransitive/" Visible="false" />
     <None Include="build\MvvmAIO.R3.SourceGenerators.targets" Pack="true" PackagePath="build/" Visible="false" />
     <None Include="build\MvvmAIO.R3.SourceGenerators.targets" Pack="true" PackagePath="buildTransitive/" Visible="false" />
-    <None Include="..\MvvmAIO.R3.SourceGenerators\bin\$(Configuration)\netstandard2.0\MvvmAIO.R3.SourceGenerators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\MvvmAIO.R3.SourceGenerators.Roslyn4031\bin\$(Configuration)\netstandard2.0\MvvmAIO.R3.SourceGenerators.dll" Pack="true" PackagePath="analyzers/dotnet/roslyn4.3/cs" Visible="false" />
+    <None Include="..\MvvmAIO.R3.SourceGenerators.Roslyn4120\bin\$(Configuration)\netstandard2.0\MvvmAIO.R3.SourceGenerators.dll" Pack="true" PackagePath="analyzers/dotnet/roslyn4.12/cs" Visible="false" />
+    <None Include="..\MvvmAIO.R3.SourceGenerators.Roslyn5000\bin\$(Configuration)\netstandard2.0\MvvmAIO.R3.SourceGenerators.dll" Pack="true" PackagePath="analyzers/dotnet/roslyn5.0/cs" Visible="false" />
   </ItemGroup>
 
   <Target Name="BuildInputsBeforeNuspec" BeforeTargets="GenerateNuspec">
     <ItemGroup>
-      <_PackInputProject Include="$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators\MvvmAIO.R3.SourceGenerators.csproj" />
+      <_PackInputProject Include="$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators.Roslyn4031\MvvmAIO.R3.SourceGenerators.Roslyn4031.csproj" />
+      <_PackInputProject Include="$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators.Roslyn4120\MvvmAIO.R3.SourceGenerators.Roslyn4120.csproj" />
+      <_PackInputProject Include="$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators.Roslyn5000\MvvmAIO.R3.SourceGenerators.Roslyn5000.csproj" />
     </ItemGroup>
     <MSBuild Projects="@(_PackInputProject)" Targets="Build" Properties="Configuration=$(Configuration);NoBuild=false" />
   </Target>
@@ -50,13 +56,15 @@
           DependsOnTargets="BuildInputsBeforeNuspec"
           BeforeTargets="_GetPackageFiles">
     <PropertyGroup>
-      <_AnalyzerXml>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators\bin\$(Configuration)\netstandard2.0\MvvmAIO.R3.SourceGenerators.xml'))</_AnalyzerXml>
+      <_AnalyzerXml>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\MvvmAIO.R3.SourceGenerators.Roslyn4120\bin\$(Configuration)\netstandard2.0\MvvmAIO.R3.SourceGenerators.xml'))</_AnalyzerXml>
     </PropertyGroup>
     <Warning Condition="!Exists('$(_AnalyzerXml)')"
              Code="MvvmAIOR3PACK001"
-             Text="MvvmAIO.R3: expected analyzer XmlDoc at '$(_AnalyzerXml)' (enable GenerateDocumentationFile on the analyzer project)." />
+             Text="MvvmAIO.R3: expected analyzer XmlDoc at '$(_AnalyzerXml)' (enable GenerateDocumentationFile on shared props)." />
     <ItemGroup Condition="Exists('$(_AnalyzerXml)')">
-      <None Include="$(_AnalyzerXml)" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+      <None Include="$(_AnalyzerXml)" Pack="true" PackagePath="analyzers/dotnet/roslyn4.3/cs" Visible="false" />
+      <None Include="$(_AnalyzerXml)" Pack="true" PackagePath="analyzers/dotnet/roslyn4.12/cs" Visible="false" />
+      <None Include="$(_AnalyzerXml)" Pack="true" PackagePath="analyzers/dotnet/roslyn5.0/cs" Visible="false" />
     </ItemGroup>
   </Target>
 

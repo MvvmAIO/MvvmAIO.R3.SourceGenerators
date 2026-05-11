@@ -31,6 +31,16 @@ internal static partial class ObservableEventsBootstrapExtensions
         return default;
     }
 
+    public static NullEvents FromRoutedEvents(this object? source)
+    {
+        return default;
+    }
+
+    public static NullEvents FromRoutedEventHandlers(this object? source)
+    {
+        return default;
+    }
+
     /// <summary>
     /// Dummy receiver for grouping static observable events (<c>ObservableEventsStatics</c> codegen).
     /// Call <see cref=""ObservableEventsStatics{T}(T?)"/>: for example <c>((MyType?)null).ObservableEventsStatics()</c>.
@@ -56,6 +66,16 @@ internal static partial class ObservableEventsBootstrapExtensions
     }
 
     public static NullEvents FromEventHandlers(this object? source)
+    {
+        return default;
+    }
+
+    public static NullEvents FromRoutedEvents(this object? source)
+    {
+        return default;
+    }
+
+    public static NullEvents FromRoutedEventHandlers(this object? source)
     {
         return default;
     }

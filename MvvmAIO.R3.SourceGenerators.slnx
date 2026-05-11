@@ -1,4 +1,7 @@
 <Solution>
-  <Project Path="MvvmAIO.R3.SourceGenerators/MvvmAIO.R3.SourceGenerators.csproj" />
+  <Project Path="MvvmAIO.R3.SourceGenerators.Roslyn4031/MvvmAIO.R3.SourceGenerators.Roslyn4031.csproj" />
+  <Project Path="MvvmAIO.R3.SourceGenerators.Roslyn4120/MvvmAIO.R3.SourceGenerators.Roslyn4120.csproj" />
+  <Project Path="MvvmAIO.R3.SourceGenerators.Roslyn5000/MvvmAIO.R3.SourceGenerators.Roslyn5000.csproj" />
   <Project Path="MvvmAIO.R3.SourceGenerators.Package/MvvmAIO.R3.SourceGenerators.Package.csproj" />
+  <Project Path="MvvmAIO.R3.SourceGenerators/MvvmAIO.R3.SourceGenerators.shproj" Id="8f2c1a9b-4d3e-4f5a-9c7d-1e2b3a4c5d6e" />
 </Solution>

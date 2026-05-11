@@ -1,0 +1,50 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <PackageId>MvvmAIO.R3.SourceGenerators</PackageId>
+    <DebugType>embedded</DebugType>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Multi-targeting for different Roslyn versions (same pattern as MvvmAIO.Prism.SourceGenerators).
+    Each Roslyn-versioned project name: MvvmAIO.R3.SourceGenerators.Roslyn&lt;MAJOR&gt;&lt;MINOR2&gt;&lt;PATCH&gt;
+    e.g. Roslyn4120 -> Microsoft.CodeAnalysis.CSharp 4.12.0.
+    Lowest line is 4.3.1 (Roslyn4031): SyntaxValueProvider.ForAttributeWithMetadataName requires Roslyn 4.3+.
+  -->
+  <PropertyGroup>
+    <AssemblyName>$(MSBuildProjectName.Substring(0, $([MSBuild]::Subtract($(MSBuildProjectName.Length), 11))))</AssemblyName>
+
+    <MvvmAIOR3SourceGeneratorRoslynMajorVersion>$(MSBuildProjectName.Substring($([MSBuild]::Subtract($(MSBuildProjectName.Length), 4)), 1))</MvvmAIOR3SourceGeneratorRoslynMajorVersion>
+    <MvvmAIOR3SourceGeneratorRoslynMinorVersion>$(MSBuildProjectName.Substring($([MSBuild]::Subtract($(MSBuildProjectName.Length), 3)), 2))</MvvmAIOR3SourceGeneratorRoslynMinorVersion>
+    <MvvmAIOR3SourceGeneratorRoslynPatchVersion>$(MSBuildProjectName.Substring($([MSBuild]::Subtract($(MSBuildProjectName.Length), 1)), 1))</MvvmAIOR3SourceGeneratorRoslynPatchVersion>
+    <MvvmAIOR3SourceGeneratorRoslynVersion>$(MvvmAIOR3SourceGeneratorRoslynMajorVersion).$(MvvmAIOR3SourceGeneratorRoslynMinorVersion).$(MvvmAIOR3SourceGeneratorRoslynPatchVersion)</MvvmAIOR3SourceGeneratorRoslynVersion>
+
+    <MvvmAIOR3SourceGeneratorCodeAnalysisAnalyzersVersion>3.11.0</MvvmAIOR3SourceGeneratorCodeAnalysisAnalyzersVersion>
+    <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals($(MvvmAIOR3SourceGeneratorRoslynVersion), 4.3.1))">$(DefineConstants);ROSLYN_4_3_1_OR_GREATER</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals($(MvvmAIOR3SourceGeneratorRoslynVersion), 4.12.0))">$(DefineConstants);ROSLYN_4_12_0_OR_GREATER</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals($(MvvmAIOR3SourceGeneratorRoslynVersion), 5.0.0))">$(DefineConstants);ROSLYN_5_0_0_OR_GREATER</DefineConstants>
+
+    <NoWarn Condition="$([MSBuild]::VersionLessThan($(MvvmAIOR3SourceGeneratorRoslynVersion), 5.0.0))">$(NoWarn);RS2003</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals($(MvvmAIOR3SourceGeneratorRoslynVersion), 5.0.0))">
+    <MvvmAIOR3SourceGeneratorCodeAnalysisAnalyzersVersion>5.3.0</MvvmAIOR3SourceGeneratorCodeAnalysisAnalyzersVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="$(MvvmAIOR3SourceGeneratorCodeAnalysisAnalyzersVersion)">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="$(MvvmAIOR3SourceGeneratorRoslynVersion)" PrivateAssets="all" Pack="false" />
+  </ItemGroup>
+
+</Project>

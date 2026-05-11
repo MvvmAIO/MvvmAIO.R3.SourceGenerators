@@ -29,7 +29,7 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
             static (node, _) => node is MethodDeclarationSyntax { Parent: TypeDeclarationSyntax },
             static (syntaxContext, _) => (IMethodSymbol)syntaxContext.TargetSymbol);
 
-        context.RegisterSourceOutput(targets, static (spc, method) =>
+        context.RegisterSourceOutput(targets, (spc, method) =>
         {
             var containingType = method.ContainingType;
             if (!containingType.IsPartial())

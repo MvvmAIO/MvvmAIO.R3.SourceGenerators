@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\MvvmAIO.R3.SourceGenerators\MvvmAIO.R3.SourceGenerators.props" />
+  <Import Project="..\MvvmAIO.R3.SourceGenerators\MvvmAIO.R3.SourceGenerators.projitems" Label="Shared" />
+
+</Project>
