@@ -46,8 +46,19 @@ sealed class Build : NukeBuild
                 .EnableNoRestore());
         });
 
+    // Package + analyzers only; skips test project so Publish does not hit Linux apphost (xUnit v3) build issues.
+    Target CompilePackage => _ => _
+        .DependsOn(Restore)
+        .Executes(() =>
+        {
+            DotNetBuild(s => s
+                .SetProjectFile(PackageProject)
+                .SetConfiguration(Configuration)
+                .EnableNoRestore());
+        });
+
     Target Pack => _ => _
-        .DependsOn(Compile)
+        .DependsOn(CompilePackage)
         .Executes(() =>
         {
             DotNetPack(s =>

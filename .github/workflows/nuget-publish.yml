@@ -64,5 +64,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: nuget-packages
-          path: MvvmAIO.R3.SourceGenerators/bin/Release/*.nupkg
+          path: MvvmAIO.R3.SourceGenerators.Package/bin/Release/*.nupkg
           if-no-files-found: warn
