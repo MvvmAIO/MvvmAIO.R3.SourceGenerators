@@ -152,4 +152,60 @@ public sealed class R3CommandGeneratorTests
 
         return Verifier.Verify(GeneratorTestHarness.ToSnapshot(output));
     }
+
+    [Fact]
+    public void Generates_command_with_canexecute_member()
+    {
+        const string source = """
+            namespace Demo;
+
+            public partial class ShellViewModel
+            {
+                private readonly R3.Observable<bool> _canSave = new R3.Observable<bool>(true);
+
+                [MvvmAIO.R3.R3Command(CanExecute = nameof(_canSave))]
+                private void Save()
+                {
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new R3CommandGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Contains("ReactiveCommand", snapshot);
+        Assert.Contains("SaveCommand", snapshot);
+        Assert.Contains("_canSave", snapshot);
+        Assert.DoesNotContain("R3SG", snapshot.Split("Generated Sources:")[0]);
+    }
+
+    [Fact]
+    public void Generates_command_with_canexecute_and_parameter()
+    {
+        const string source = """
+            namespace Demo;
+
+            public partial class ShellViewModel
+            {
+                private readonly R3.Observable<bool> _canDelete = new R3.Observable<bool>(true);
+
+                [MvvmAIO.R3.R3Command(CanExecute = nameof(_canDelete))]
+                private void Delete(int id)
+                {
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new R3CommandGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Contains("ReactiveCommand<int>", snapshot);
+        Assert.Contains("DeleteCommand", snapshot);
+        Assert.Contains("_canDelete", snapshot);
+        Assert.DoesNotContain("R3SG", snapshot.Split("Generated Sources:")[0]);
+    }
 }
