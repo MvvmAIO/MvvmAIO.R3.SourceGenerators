@@ -154,6 +154,35 @@ public sealed class ObservableEventsGeneratorTests
         Assert.Contains("FromEventHandler", snapshot);
     }
 
+    [Fact]
+    public void Generates_FromEvents_wrapper_for_generic_class()
+    {
+        const string source = """
+            namespace Demo;
+
+            public class GenericSource<T>
+            {
+                public event System.Action<T>? ValueChanged;
+            }
+
+            public static class Usage
+            {
+                public static void Run(GenericSource<string> s)
+                {
+                    _ = s.FromEvents().ValueChanged;
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new ObservableEventsGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("ValueChanged", snapshot);
+    }
+
     private const string AvaloniaStubs = """
         namespace Avalonia.Interactivity
         {

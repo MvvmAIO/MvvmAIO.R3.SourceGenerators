@@ -709,7 +709,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                     break;
                 }
 
-                if (current.TypeKind != TypeKind.Class || current.IsGenericType)
+                if (current.TypeKind != TypeKind.Class)
                 {
                     continue;
                 }
@@ -834,9 +834,13 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
     private static MethodDeclarationSyntax CreateFromEventsMethod(INamedTypeSymbol type)
     {
         var typeName = SyntaxFactory.ParseTypeName(QualifiedType(type));
-        var returnType = SyntaxFactory.ParseTypeName(GetWrapperName(type, ObservableEventsEntryKind.FromEvents));
+        var wrapperNameBase = GetWrapperName(type, ObservableEventsEntryKind.FromEvents);
+        var returnTypeName = type.IsGenericType
+            ? $"{wrapperNameBase}<{string.Join(", ", type.TypeParameters.Select(tp => tp.Name))}>"
+            : wrapperNameBase;
+        var returnType = SyntaxFactory.ParseTypeName(returnTypeName);
 
-        return SyntaxFactory.MethodDeclaration(returnType, FromEventsEntryMethodName)
+        var method = SyntaxFactory.MethodDeclaration(returnType, FromEventsEntryMethodName)
             .AddModifiers(
                 SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                 SyntaxFactory.Token(SyntaxKind.StaticKeyword))
@@ -851,14 +855,30 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(SyntaxFactory.IdentifierName("source")))))))
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+
+        // Add type parameters if the original type is generic
+        if (type.IsGenericType)
+        {
+            var typeParameters = SyntaxFactory.TypeParameterList(
+                SyntaxFactory.SeparatedList(
+                    type.TypeParameters.Select(tp =>
+                        SyntaxFactory.TypeParameter(tp.Name))));
+            method = method.WithTypeParameterList(typeParameters);
+        }
+
+        return method;
     }
 
     private static MethodDeclarationSyntax CreateFromEventHandlersMethod(INamedTypeSymbol type)
     {
         var typeName = SyntaxFactory.ParseTypeName(QualifiedType(type));
-        var returnType = SyntaxFactory.ParseTypeName(GetWrapperName(type, ObservableEventsEntryKind.FromEventHandlers));
+        var wrapperNameBase = GetWrapperName(type, ObservableEventsEntryKind.FromEventHandlers);
+        var returnTypeName = type.IsGenericType
+            ? $"{wrapperNameBase}<{string.Join(", ", type.TypeParameters.Select(tp => tp.Name))}>"
+            : wrapperNameBase;
+        var returnType = SyntaxFactory.ParseTypeName(returnTypeName);
 
-        return SyntaxFactory.MethodDeclaration(returnType, FromEventHandlersEntryMethodName)
+        var method = SyntaxFactory.MethodDeclaration(returnType, FromEventHandlersEntryMethodName)
             .AddModifiers(
                 SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                 SyntaxFactory.Token(SyntaxKind.StaticKeyword))
@@ -873,14 +893,29 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(SyntaxFactory.IdentifierName("source")))))))
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+
+        if (type.IsGenericType)
+        {
+            var typeParameters = SyntaxFactory.TypeParameterList(
+                SyntaxFactory.SeparatedList(
+                    type.TypeParameters.Select(tp =>
+                        SyntaxFactory.TypeParameter(tp.Name))));
+            method = method.WithTypeParameterList(typeParameters);
+        }
+
+        return method;
     }
 
     private static MethodDeclarationSyntax CreateFromRoutedEventsMethod(INamedTypeSymbol type)
     {
         var typeName = SyntaxFactory.ParseTypeName(QualifiedType(type));
-        var returnType = SyntaxFactory.ParseTypeName(GetWrapperName(type, ObservableEventsEntryKind.FromRoutedEvents));
+        var wrapperNameBase = GetWrapperName(type, ObservableEventsEntryKind.FromRoutedEvents);
+        var returnTypeName = type.IsGenericType
+            ? $"{wrapperNameBase}<{string.Join(", ", type.TypeParameters.Select(tp => tp.Name))}>"
+            : wrapperNameBase;
+        var returnType = SyntaxFactory.ParseTypeName(returnTypeName);
 
-        return SyntaxFactory.MethodDeclaration(returnType, FromRoutedEventsEntryMethodName)
+        var method = SyntaxFactory.MethodDeclaration(returnType, FromRoutedEventsEntryMethodName)
             .AddModifiers(
                 SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                 SyntaxFactory.Token(SyntaxKind.StaticKeyword))
@@ -895,14 +930,29 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(SyntaxFactory.IdentifierName("source")))))))
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+
+        if (type.IsGenericType)
+        {
+            var typeParameters = SyntaxFactory.TypeParameterList(
+                SyntaxFactory.SeparatedList(
+                    type.TypeParameters.Select(tp =>
+                        SyntaxFactory.TypeParameter(tp.Name))));
+            method = method.WithTypeParameterList(typeParameters);
+        }
+
+        return method;
     }
 
     private static MethodDeclarationSyntax CreateFromRoutedEventHandlersMethod(INamedTypeSymbol type)
     {
         var typeName = SyntaxFactory.ParseTypeName(QualifiedType(type));
-        var returnType = SyntaxFactory.ParseTypeName(GetWrapperName(type, ObservableEventsEntryKind.FromRoutedEventHandlers));
+        var wrapperNameBase = GetWrapperName(type, ObservableEventsEntryKind.FromRoutedEventHandlers);
+        var returnTypeName = type.IsGenericType
+            ? $"{wrapperNameBase}<{string.Join(", ", type.TypeParameters.Select(tp => tp.Name))}>"
+            : wrapperNameBase;
+        var returnType = SyntaxFactory.ParseTypeName(returnTypeName);
 
-        return SyntaxFactory.MethodDeclaration(returnType, FromRoutedEventHandlersEntryMethodName)
+        var method = SyntaxFactory.MethodDeclaration(returnType, FromRoutedEventHandlersEntryMethodName)
             .AddModifiers(
                 SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                 SyntaxFactory.Token(SyntaxKind.StaticKeyword))
@@ -917,6 +967,17 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(SyntaxFactory.IdentifierName("source")))))))
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+
+        if (type.IsGenericType)
+        {
+            var typeParameters = SyntaxFactory.TypeParameterList(
+                SyntaxFactory.SeparatedList(
+                    type.TypeParameters.Select(tp =>
+                        SyntaxFactory.TypeParameter(tp.Name))));
+            method = method.WithTypeParameterList(typeParameters);
+        }
+
+        return method;
     }
 
     private static ClassDeclarationSyntax CreateAvaloniaRoutedExtensionsClass(INamedTypeSymbol type, ObservableEventsEntryKind entryKind)
@@ -951,6 +1012,16 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var wrapperName = GetWrapperName(type, entryKind);
         var classDeclaration = SyntaxFactory.ClassDeclaration(wrapperName)
             .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword));
+
+        // Add type parameters if the original type is generic
+        if (type.IsGenericType)
+        {
+            var typeParameters = SyntaxFactory.TypeParameterList(
+                SyntaxFactory.SeparatedList(
+                    type.TypeParameters.Select(tp =>
+                        SyntaxFactory.TypeParameter(tp.Name))));
+            classDeclaration = classDeclaration.WithTypeParameterList(typeParameters);
+        }
 
         var senderType = SyntaxFactory.ParseTypeName(QualifiedType(type));
         var field = SyntaxFactory.FieldDeclaration(
