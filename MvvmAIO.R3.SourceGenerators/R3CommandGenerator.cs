@@ -12,7 +12,7 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace MvvmAIO.R3.SourceGenerators;
 
-// [Generator(LanguageNames.CSharp)]
+[Generator(LanguageNames.CSharp)]
 public sealed class R3CommandGenerator : IIncrementalGenerator
 {
     private const string AttributeMetadataName = "MvvmAIO.R3.R3CommandAttribute";
