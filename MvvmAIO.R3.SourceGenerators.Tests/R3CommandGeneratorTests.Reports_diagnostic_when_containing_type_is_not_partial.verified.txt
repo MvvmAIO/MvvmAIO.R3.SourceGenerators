@@ -11,5 +11,11 @@ namespace MvvmAIO.R3
 public sealed class R3CommandAttribute : Attribute
 {
     public string? CommandName { get; set; }
+
+    /// <summary>
+    /// Name of a member (field or property) of type <c>Observable&lt;bool&gt;</c> or <c>IObservable&lt;bool&gt;</c>
+    /// that controls whether the command can execute.
+    /// </summary>
+    public string? CanExecute { get; set; }
 }
 }

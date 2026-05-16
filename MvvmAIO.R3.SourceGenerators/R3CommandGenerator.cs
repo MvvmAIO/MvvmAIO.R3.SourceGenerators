@@ -99,7 +99,9 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
             ? ((INamedTypeSymbol)method.ReturnType).TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             : null;
 
-        info = new CommandInfo(commandName, parameterType, outputType, isTask || isValueTask, taskOfT || valueTaskOfT);
+        var canExecuteMemberName = GetCanExecuteMemberName(method);
+
+        info = new CommandInfo(commandName, parameterType, outputType, isTask || isValueTask, taskOfT || valueTaskOfT, canExecuteMemberName);
         return true;
     }
 
@@ -108,6 +110,8 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
         var methodName = method.Name;
         var fieldName = "_" + char.ToLowerInvariant(info.PropertyName[0]) + info.PropertyName.Substring(1);
 
+        var canExecuteExpr = info.HasCanExecute ? $", {info.CanExecuteMemberName}" : "";
+
         string commandType;
         string constructorExpr;
         if (info.IsAsyncWithoutResult)
@@ -115,33 +119,33 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
             commandType = info.ParameterType is null ? "global::R3.ReactiveCommand" : $"global::R3.ReactiveCommand<{info.ParameterType}>";
             if (info.ParameterType is null)
             {
-                constructorExpr = $"new global::R3.ReactiveCommand((_, __) => new global::System.Threading.Tasks.ValueTask({methodName}()))";
+                constructorExpr = $"new global::R3.ReactiveCommand((_, __) => new global::System.Threading.Tasks.ValueTask({methodName}()){canExecuteExpr})";
             }
             else
             {
-                constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}>((x, __) => new global::System.Threading.Tasks.ValueTask({methodName}(x)))";
+                constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}>((x, __) => new global::System.Threading.Tasks.ValueTask({methodName}(x)){canExecuteExpr})";
             }
         }
         else if (info.IsAsyncWithResult)
         {
             commandType = $"global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>";
-            constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>(async (x, __) => await {methodName}(x))";
+            constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>(async (x, __) => await {methodName}(x){canExecuteExpr})";
         }
         else if (info.OutputType is not null)
         {
             commandType = $"global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>";
-            constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>(x => {methodName}(x))";
+            constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>(x => {methodName}(x){canExecuteExpr})";
         }
         else
         {
             commandType = info.ParameterType is null ? "global::R3.ReactiveCommand" : $"global::R3.ReactiveCommand<{info.ParameterType}>";
             if (info.ParameterType is null)
             {
-                constructorExpr = $"new global::R3.ReactiveCommand(_ => {methodName}())";
+                constructorExpr = $"new global::R3.ReactiveCommand(_ => {methodName}(){canExecuteExpr})";
             }
             else
             {
-                constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}>(x => {methodName}(x))";
+                constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}>(x => {methodName}(x){canExecuteExpr})";
             }
         }
 
@@ -183,15 +187,38 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
 
         return method.Name + "Command";
     }
+
+    private static string? GetCanExecuteMemberName(IMethodSymbol method)
+    {
+        foreach (var attribute in method.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != AttributeMetadataName)
+            {
+                continue;
+            }
+
+            foreach (var arg in attribute.NamedArguments)
+            {
+                if (arg.Key == "CanExecute" && arg.Value.Value is string value && !string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private readonly struct CommandInfo
     {
-        public CommandInfo(string propertyName, string? parameterType, string? outputType, bool isAsyncWithoutResult, bool isAsyncWithResult)
+        public CommandInfo(string propertyName, string? parameterType, string? outputType, bool isAsyncWithoutResult, bool isAsyncWithResult, string? canExecuteMemberName)
         {
             PropertyName = propertyName;
             ParameterType = parameterType;
             OutputType = outputType;
             IsAsyncWithoutResult = isAsyncWithoutResult;
             IsAsyncWithResult = isAsyncWithResult;
+            CanExecuteMemberName = canExecuteMemberName;
         }
 
         public string PropertyName { get; }
@@ -203,5 +230,9 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
         public bool IsAsyncWithoutResult { get; }
 
         public bool IsAsyncWithResult { get; }
+
+        public string? CanExecuteMemberName { get; }
+
+        public bool HasCanExecute => !string.IsNullOrWhiteSpace(CanExecuteMemberName);
     }
 }
