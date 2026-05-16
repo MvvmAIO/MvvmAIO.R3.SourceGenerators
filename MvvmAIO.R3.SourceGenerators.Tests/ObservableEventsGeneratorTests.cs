@@ -88,6 +88,72 @@ public sealed class ObservableEventsGeneratorTests
         Assert.Contains("source.AddHandler(routedEvent, h, routes, handledEventsToo)", snapshot);
     }
 
+    [Fact]
+    public void Generates_FromEvents_wrapper_for_interface_type()
+    {
+        const string source = """
+            namespace Demo;
+
+            public interface INotifySomething
+            {
+                event System.EventHandler<System.EventArgs>? SomethingChanged;
+            }
+
+            public interface INotifyMore : INotifySomething
+            {
+                event System.Action? MoreChanged;
+            }
+
+            public static class Usage
+            {
+                public static void Run(INotifyMore s)
+                {
+                    _ = s.FromEvents().SomethingChanged;
+                    _ = s.FromEvents().MoreChanged;
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new ObservableEventsGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("SomethingChanged", snapshot);
+        Assert.Contains("MoreChanged", snapshot);
+    }
+
+    [Fact]
+    public void Generates_FromEventHandlers_wrapper_for_interface_type()
+    {
+        const string source = """
+            namespace Demo;
+
+            public interface INotifyPropertyChanged
+            {
+                event System.EventHandler? PropertyChanged;
+            }
+
+            public static class Usage
+            {
+                public static void Run(INotifyPropertyChanged s)
+                {
+                    _ = s.FromEventHandlers().PropertyChanged;
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new ObservableEventsGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("PropertyChanged", snapshot);
+        Assert.Contains("FromEventHandler", snapshot);
+    }
+
     private const string AvaloniaStubs = """
         namespace Avalonia.Interactivity
         {

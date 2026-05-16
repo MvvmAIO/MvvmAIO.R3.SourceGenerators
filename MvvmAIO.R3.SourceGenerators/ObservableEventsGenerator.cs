@@ -679,28 +679,48 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
     /// <summary>
     /// Public instance events declared on <paramref name="type"/> and its non-generic class base types (excluding <see cref="object"/>),
     /// with derived declarations taking precedence over the same event name on a base type.
+    /// When <paramref name="type"/> is an interface, events declared on the interface and all its base interfaces are collected.
     /// </summary>
     private static IEnumerable<IEventSymbol> GetPublicInstanceEventsFromTypeAndBases(INamedTypeSymbol type)
     {
         var byName = new Dictionary<string, IEventSymbol>(System.StringComparer.Ordinal);
-        for (var current = type; current is not null; current = current.BaseType)
+
+        if (type.TypeKind == TypeKind.Interface)
         {
-            if (current.SpecialType == SpecialType.System_Object)
+            // Collect events from the interface itself and all base interfaces.
+            foreach (var iface in new[] { type }.Concat(type.AllInterfaces))
             {
-                break;
-            }
-
-            if (current.TypeKind != TypeKind.Class || current.IsGenericType)
-            {
-                continue;
-            }
-
-            foreach (var evt in current.GetMembers().OfType<IEventSymbol>()
-                         .Where(static e => e is { IsStatic: false, DeclaredAccessibility: Accessibility.Public }))
-            {
-                if (!byName.ContainsKey(evt.Name))
+                foreach (var evt in iface.GetMembers().OfType<IEventSymbol>()
+                             .Where(static e => !e.IsStatic))
                 {
-                    byName[evt.Name] = evt;
+                    if (!byName.ContainsKey(evt.Name))
+                    {
+                        byName[evt.Name] = evt;
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (var current = type; current is not null; current = current.BaseType)
+            {
+                if (current.SpecialType == SpecialType.System_Object)
+                {
+                    break;
+                }
+
+                if (current.TypeKind != TypeKind.Class || current.IsGenericType)
+                {
+                    continue;
+                }
+
+                foreach (var evt in current.GetMembers().OfType<IEventSymbol>()
+                             .Where(static e => e is { IsStatic: false, DeclaredAccessibility: Accessibility.Public }))
+                {
+                    if (!byName.ContainsKey(evt.Name))
+                    {
+                        byName[evt.Name] = evt;
+                    }
                 }
             }
         }
