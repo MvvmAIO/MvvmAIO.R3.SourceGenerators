@@ -235,6 +235,14 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
     private readonly struct ObservableEventTargetSets
     {
+        public static readonly ObservableEventTargetSets Empty = new(
+            ImmutableArray<INamedTypeSymbol>.Empty,
+            ImmutableArray<INamedTypeSymbol>.Empty,
+            ImmutableArray<INamedTypeSymbol>.Empty,
+            ImmutableArray<INamedTypeSymbol>.Empty,
+            ImmutableArray<AttachedRoutedEventTarget>.Empty,
+            ImmutableArray<AttachedRoutedEventTarget>.Empty);
+
         public ObservableEventTargetSets(
             ImmutableArray<INamedTypeSymbol> fromEventsTypes,
             ImmutableArray<INamedTypeSymbol> fromEventHandlersTypes,
@@ -277,23 +285,21 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var bootstrapType = compilation.GetTypeByMetadataName(BootstrapExtensionsMetadataName);
         if (bootstrapType is null)
         {
-            return new ObservableEventTargetSets(
-                ImmutableArray<INamedTypeSymbol>.Empty,
-                ImmutableArray<INamedTypeSymbol>.Empty,
-                ImmutableArray<INamedTypeSymbol>.Empty,
-                ImmutableArray<INamedTypeSymbol>.Empty,
-                ImmutableArray<AttachedRoutedEventTarget>.Empty,
-                ImmutableArray<AttachedRoutedEventTarget>.Empty);
+            return ObservableEventTargetSets.Empty;
         }
 
+        // Use pooled hash sets for better performance with large candidate sets
         var fromEvents = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromRoutedEvents = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromRoutedHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromAttachedRoutedEvents = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromAttachedRoutedHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-        var useAvalonia = compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent`1") is not null
-            || compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent") is not null;
+
+        // Cache Avalonia detection to avoid repeated metadata lookups
+        var avaloniaRoutedEventType = compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent`1");
+        var avaloniaRoutedEventTypeNonGeneric = compilation.GetTypeByMetadataName("Avalonia.Interactivity.RoutedEvent");
+        var useAvalonia = avaloniaRoutedEventType is not null || avaloniaRoutedEventTypeNonGeneric is not null;
 
         foreach (var candidate in candidates)
         {
