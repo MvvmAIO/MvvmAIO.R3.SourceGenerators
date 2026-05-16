@@ -81,22 +81,5 @@ internal static partial class ObservableEventsBootstrapExtensions
     {
         return default;
     }
-
-    /// <summary>
-    /// Dummy receiver for grouping static observable events (<c>ObservableEventsStatics</c> codegen).
-    /// Call <see cref=""ObservableEventsStatics{T}(T?)"/>: for example <c>((MyType?)null).ObservableEventsStatics()</c>.
-    /// </summary>
-    public static NullEvents ObservableEventsStatics<T>(this T? source)
-    {
-        return default;
-    }
 }
-}
-
---- R3.SourceGenerators.ObservableEventsStatics.g.cs ---
-#nullable enable
-namespace R3.SourceGenerators;
-
-public static partial class ObservableEventsStatics
-{
 }
