@@ -43,7 +43,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
     /// <summary>
     /// When <see langword="false"/>, no <c>ObservableEventsStatics</c> / <c>OBS_*</c> / static-event wrappers are emitted and static <c>FromEvents</c> member accesses are not discovered.
     /// </summary>
-    private const bool StaticObservableEventsGenerationEnabled = true;
+    private const bool StaticObservableEventsGenerationEnabled = false;
 
     private enum ObservableEventsEntryKind
     {
