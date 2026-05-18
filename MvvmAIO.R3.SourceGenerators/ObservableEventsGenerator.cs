@@ -119,6 +119,24 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 }
             }
 
+            foreach (var target in targets.FromEventsGenericConstraintTargets)
+            {
+                var source = GenerateObservableSourceForGenericConstraintTarget(target, input.Compilation, spc, ObservableEventsEntryKind.FromEvents);
+                if (!string.IsNullOrWhiteSpace(source))
+                {
+                    spc.AddSource($"{GetGenericConstraintTargetHintName(target)}.FromEvents.g.cs", SourceText.From(source, Encoding.UTF8));
+                }
+            }
+
+            foreach (var target in targets.FromEventHandlersGenericConstraintTargets)
+            {
+                var source = GenerateObservableSourceForGenericConstraintTarget(target, input.Compilation, spc, ObservableEventsEntryKind.FromEventHandlers);
+                if (!string.IsNullOrWhiteSpace(source))
+                {
+                    spc.AddSource($"{GetGenericConstraintTargetHintName(target)}.FromEventHandlers.g.cs", SourceText.From(source, Encoding.UTF8));
+                }
+            }
+
             foreach (var type in targets.FromRoutedEventsTypes)
             {
                 var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromRoutedEvents, input.UseWpf);
@@ -240,6 +258,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ImmutableArray<INamedTypeSymbol>.Empty,
             ImmutableArray<INamedTypeSymbol>.Empty,
             ImmutableArray<INamedTypeSymbol>.Empty,
+            ImmutableArray<GenericConstraintTarget>.Empty,
+            ImmutableArray<GenericConstraintTarget>.Empty,
             ImmutableArray<AttachedRoutedEventTarget>.Empty,
             ImmutableArray<AttachedRoutedEventTarget>.Empty);
 
@@ -248,6 +268,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ImmutableArray<INamedTypeSymbol> fromEventHandlersTypes,
             ImmutableArray<INamedTypeSymbol> fromRoutedEventsTypes,
             ImmutableArray<INamedTypeSymbol> fromRoutedEventHandlersTypes,
+            ImmutableArray<GenericConstraintTarget> fromEventsGenericConstraintTargets,
+            ImmutableArray<GenericConstraintTarget> fromEventHandlersGenericConstraintTargets,
             ImmutableArray<AttachedRoutedEventTarget> fromAttachedRoutedEventsTypes,
             ImmutableArray<AttachedRoutedEventTarget> fromAttachedRoutedEventHandlersTypes)
         {
@@ -255,6 +277,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             FromEventHandlersTypes = fromEventHandlersTypes;
             FromRoutedEventsTypes = fromRoutedEventsTypes;
             FromRoutedEventHandlersTypes = fromRoutedEventHandlersTypes;
+            FromEventsGenericConstraintTargets = fromEventsGenericConstraintTargets;
+            FromEventHandlersGenericConstraintTargets = fromEventHandlersGenericConstraintTargets;
             FromAttachedRoutedEventsTypes = fromAttachedRoutedEventsTypes;
             FromAttachedRoutedEventHandlersTypes = fromAttachedRoutedEventHandlersTypes;
         }
@@ -263,8 +287,24 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         public ImmutableArray<INamedTypeSymbol> FromEventHandlersTypes { get; }
         public ImmutableArray<INamedTypeSymbol> FromRoutedEventsTypes { get; }
         public ImmutableArray<INamedTypeSymbol> FromRoutedEventHandlersTypes { get; }
+        public ImmutableArray<GenericConstraintTarget> FromEventsGenericConstraintTargets { get; }
+        public ImmutableArray<GenericConstraintTarget> FromEventHandlersGenericConstraintTargets { get; }
         public ImmutableArray<AttachedRoutedEventTarget> FromAttachedRoutedEventsTypes { get; }
         public ImmutableArray<AttachedRoutedEventTarget> FromAttachedRoutedEventHandlersTypes { get; }
+    }
+
+    private readonly struct GenericConstraintTarget
+    {
+        public GenericConstraintTarget(ImmutableArray<INamedTypeSymbol> constraintTypes)
+        {
+            ConstraintTypes = constraintTypes;
+            Key = string.Join(
+                "__",
+                constraintTypes.Select(static t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+        }
+
+        public ImmutableArray<INamedTypeSymbol> ConstraintTypes { get; }
+        public string Key { get; }
     }
 
     private readonly struct AttachedRoutedEventTarget
@@ -293,6 +333,8 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var fromHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromRoutedEvents = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromRoutedHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var fromEventsGenericConstraints = new Dictionary<string, GenericConstraintTarget>(System.StringComparer.Ordinal);
+        var fromHandlersGenericConstraints = new Dictionary<string, GenericConstraintTarget>(System.StringComparer.Ordinal);
         var fromAttachedRoutedEvents = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var fromAttachedRoutedHandlers = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
@@ -324,6 +366,17 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
                         fromEvents.Add(fromEventsTarget);
                     }
+                    else if (methodSymbol.Name == FromEventsEntryMethodName
+                             && TryGetBootstrapGenericConstraintTarget(
+                                 invocation,
+                                 semanticModel,
+                                 methodSymbol,
+                                 bootstrapType,
+                                 FromEventsEntryMethodName,
+                                 out var fromEventsGenericConstraintTarget))
+                    {
+                        fromEventsGenericConstraints[fromEventsGenericConstraintTarget.Key] = fromEventsGenericConstraintTarget;
+                    }
                     else if (methodSymbol.Name == FromEventHandlersEntryMethodName
                              && TryGetBootstrapObservableEventsExtensionTarget(
                                  invocation,
@@ -339,6 +392,17 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                         }
 
                         fromHandlers.Add(handlerTarget);
+                    }
+                    else if (methodSymbol.Name == FromEventHandlersEntryMethodName
+                             && TryGetBootstrapGenericConstraintTarget(
+                                 invocation,
+                                 semanticModel,
+                                 methodSymbol,
+                                 bootstrapType,
+                                 FromEventHandlersEntryMethodName,
+                                 out var handlerGenericConstraintTarget))
+                    {
+                        fromHandlersGenericConstraints[handlerGenericConstraintTarget.Key] = handlerGenericConstraintTarget;
                     }
                     else if ((useWpf || useAvalonia)
                              && methodSymbol.Name == FromRoutedEventsEntryMethodName
@@ -452,11 +516,19 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 .Select(static t => new AttachedRoutedEventTarget(t))
                 .ToImmutableArray();
 
+        static ImmutableArray<GenericConstraintTarget> OrderGeneric(Dictionary<string, GenericConstraintTarget> set) =>
+            set
+                .OrderBy(static pair => pair.Key, System.StringComparer.Ordinal)
+                .Select(static pair => pair.Value)
+                .ToImmutableArray();
+
         return new ObservableEventTargetSets(
             Order(fromEvents),
             Order(fromHandlers),
             Order(fromRoutedEvents),
             Order(fromRoutedHandlers),
+            OrderGeneric(fromEventsGenericConstraints),
+            OrderGeneric(fromHandlersGenericConstraints),
             OrderAttached(fromAttachedRoutedEvents),
             OrderAttached(fromAttachedRoutedHandlers));
     }
@@ -539,6 +611,83 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         }
 
         return false;
+    }
+
+    private static bool TryGetBootstrapGenericConstraintTarget(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol bootstrapType,
+        string entryMethodName,
+        out GenericConstraintTarget target)
+    {
+        target = default;
+        if (!string.Equals(methodSymbol.Name, entryMethodName, System.StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var declaration = methodSymbol.ReducedFrom ?? methodSymbol;
+        if (declaration.ContainingType?.OriginalDefinition is not { } declaring
+            || !SymbolEqualityComparer.Default.Equals(declaring, bootstrapType.OriginalDefinition))
+        {
+            return false;
+        }
+
+        if (invocation.Expression is not MemberAccessExpressionSyntax { Expression: ExpressionSyntax receiver })
+        {
+            return false;
+        }
+
+        if (semanticModel.GetTypeInfo(receiver).Type is not ITypeParameterSymbol typeParameter)
+        {
+            return false;
+        }
+
+        return TryCreateGenericConstraintTarget(typeParameter, out target);
+    }
+
+    private static bool TryCreateGenericConstraintTarget(
+        ITypeParameterSymbol typeParameter,
+        out GenericConstraintTarget target)
+    {
+        target = default;
+        var constraintTypes = typeParameter.ConstraintTypes
+            .OfType<INamedTypeSymbol>()
+            .Where(static t => t.TypeKind is TypeKind.Class or TypeKind.Interface)
+            .Where(static t => !ContainsTypeParameter(t))
+            .OrderBy(static t => t.TypeKind == TypeKind.Class ? 0 : 1)
+            .ThenBy(static t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
+            .ToImmutableArray();
+
+        if (constraintTypes.IsDefaultOrEmpty)
+        {
+            return false;
+        }
+
+        if (!constraintTypes.SelectMany(static t => GetPublicInstanceEventsFromTypeAndBases(t)).Any())
+        {
+            return false;
+        }
+
+        target = new GenericConstraintTarget(constraintTypes);
+        return true;
+    }
+
+    private static bool ContainsTypeParameter(ITypeSymbol type)
+    {
+        if (type.TypeKind == TypeKind.TypeParameter)
+        {
+            return true;
+        }
+
+        return type switch
+        {
+            INamedTypeSymbol named => named.TypeArguments.Any(static t => ContainsTypeParameter(t)),
+            IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType),
+            IPointerTypeSymbol pointer => ContainsTypeParameter(pointer.PointedAtType),
+            _ => false,
+        };
     }
 
     private static bool TryGetBootstrapAttachedRoutedEventTarget(
@@ -779,6 +928,28 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
     }
 
+    private static string GenerateObservableSourceForGenericConstraintTarget(
+        GenericConstraintTarget target,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
+    {
+        var unit = SyntaxFactory.CompilationUnit()
+            .AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("R3")));
+
+        var members = new MemberDeclarationSyntax[]
+        {
+            CreateGenericConstraintExtensionsClass(target, entryKind),
+            CreateGenericConstraintWrapperClass(target, compilation, context, entryKind),
+        };
+
+        var nsMember = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
+            .AddMembers(members);
+        unit = unit.AddMembers(nsMember);
+
+        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+    }
+
     private static string GenerateAttachedRoutedEventSourceForTarget(
         AttachedRoutedEventTarget target,
         ObservableEventsEntryKind entryKind)
@@ -835,6 +1006,28 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 SyntaxFactory.Token(SyntaxKind.StaticKeyword),
                 SyntaxFactory.Token(SyntaxKind.PartialKeyword))
             .AddMembers(entryMethod);
+    }
+
+    private static ClassDeclarationSyntax CreateGenericConstraintExtensionsClass(
+        GenericConstraintTarget target,
+        ObservableEventsEntryKind entryKind)
+    {
+        var methodName = entryKind == ObservableEventsEntryKind.FromEvents
+            ? FromEventsEntryMethodName
+            : FromEventHandlersEntryMethodName;
+        var wrapperName = GetGenericConstraintWrapperName(target, entryKind);
+        var methodSource = $$"""
+            public static {{wrapperName}}<TSource> {{methodName}}<TSource>(this TSource source)
+                {{GetGenericConstraintClause(target)}}
+                => new {{wrapperName}}<TSource>(source);
+            """;
+
+        return SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.InternalKeyword),
+                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                SyntaxFactory.Token(SyntaxKind.PartialKeyword))
+            .AddMembers(SyntaxFactory.ParseMemberDeclaration(methodSource)!);
     }
 
     private static MethodDeclarationSyntax CreateFromEventsMethod(INamedTypeSymbol type)
@@ -984,6 +1177,72 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         }
 
         return method;
+    }
+
+    private static ClassDeclarationSyntax CreateGenericConstraintWrapperClass(
+        GenericConstraintTarget target,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
+    {
+        var wrapperName = GetGenericConstraintWrapperName(target, entryKind);
+        var classDeclaration = SyntaxFactory.ClassDeclaration(wrapperName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
+            .WithTypeParameterList(
+                SyntaxFactory.TypeParameterList(
+                    SyntaxFactory.SingletonSeparatedList(SyntaxFactory.TypeParameter("TSource"))))
+            .AddConstraintClauses(CreateGenericConstraintClauseSyntax(target));
+
+        var senderType = SyntaxFactory.ParseTypeName("TSource");
+        var field = SyntaxFactory.FieldDeclaration(
+                SyntaxFactory.VariableDeclaration(senderType)
+                    .AddVariables(SyntaxFactory.VariableDeclarator("_sender")))
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PrivateKeyword),
+                SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword));
+
+        var ctor = SyntaxFactory.ConstructorDeclaration(wrapperName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("sender"))
+                    .WithType(senderType))
+            .WithBody(SyntaxFactory.Block(SyntaxFactory.ParseStatement("_sender = sender;")));
+
+        var members = new List<MemberDeclarationSyntax> { field, ctor };
+        foreach (var evt in GetGenericConstraintEvents(target))
+        {
+            var eventTarget = $"(({QualifiedType(evt.ContainingType)})_sender).{evt.Name}";
+            if (entryKind == ObservableEventsEntryKind.FromEvents)
+            {
+                if (TryCreateEventObservableProperty(evt, eventTarget, context, out var eventProperty))
+                {
+                    members.Add(eventProperty);
+                }
+            }
+            else if (TryCreateEventHandlerObservableProperty(evt, eventTarget, compilation, context, out var handlerProperty))
+            {
+                members.Add(handlerProperty);
+            }
+        }
+
+        return classDeclaration.AddMembers(members.ToArray());
+    }
+
+    private static IEnumerable<IEventSymbol> GetGenericConstraintEvents(GenericConstraintTarget target)
+    {
+        var byName = new Dictionary<string, IEventSymbol>(System.StringComparer.Ordinal);
+        foreach (var constraintType in target.ConstraintTypes)
+        {
+            foreach (var evt in GetPublicInstanceEventsFromTypeAndBases(constraintType))
+            {
+                if (!byName.ContainsKey(evt.Name))
+                {
+                    byName[evt.Name] = evt;
+                }
+            }
+        }
+
+        return byName.Values.OrderBy(static e => e.Name, System.StringComparer.Ordinal);
     }
 
     private static ClassDeclarationSyntax CreateAvaloniaRoutedExtensionsClass(INamedTypeSymbol type, ObservableEventsEntryKind entryKind)
@@ -1566,6 +1825,31 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
     private static string GetStaticWrapperName(INamedTypeSymbol type) =>
         $"{GetTypeUniqueIdentifier(type)}StaticFromEventObservable";
 
+    private static string GetGenericConstraintTargetHintName(GenericConstraintTarget target) =>
+        $"GenericConstraints_{ToIdentifier(target.Key)}";
+
+    private static string GetGenericConstraintWrapperName(GenericConstraintTarget target, ObservableEventsEntryKind entryKind) =>
+        entryKind switch
+        {
+            ObservableEventsEntryKind.FromEvents => $"{GetGenericConstraintTargetHintName(target)}FromEventObservable",
+            ObservableEventsEntryKind.FromEventHandlers => $"{GetGenericConstraintTargetHintName(target)}FromEventHandlerObservable",
+            _ => throw new System.ArgumentOutOfRangeException(nameof(entryKind)),
+        };
+
+    private static string GetGenericConstraintClause(GenericConstraintTarget target) =>
+        $"where TSource : {string.Join(", ", target.ConstraintTypes.Select(static t => QualifiedConstraintType(t)))}";
+
+    private static TypeParameterConstraintClauseSyntax CreateGenericConstraintClauseSyntax(GenericConstraintTarget target) =>
+        SyntaxFactory.TypeParameterConstraintClause("TSource")
+            .WithConstraints(
+                SyntaxFactory.SeparatedList<TypeParameterConstraintSyntax>(
+                    target.ConstraintTypes.Select(static t =>
+                        (TypeParameterConstraintSyntax)SyntaxFactory.TypeConstraint(
+                            SyntaxFactory.ParseTypeName(QualifiedConstraintType(t))))));
+
+    private static string QualifiedConstraintType(INamedTypeSymbol type) =>
+        type.WithNullableAnnotation(NullableAnnotation.None).ToDisplayString(FullyQualifiedNullableFormat);
+
     private static string GetWrapperName(INamedTypeSymbol type, ObservableEventsEntryKind entryKind) =>
         entryKind switch
         {
@@ -1591,6 +1875,22 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .Replace('<', '_')
             .Replace('>', '_')
             .Replace('.', '_');
+    }
+
+    private static string ToIdentifier(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            builder.Append(char.IsLetterOrDigit(ch) || ch == '_' ? ch : '_');
+        }
+
+        if (builder.Length == 0 || char.IsDigit(builder[0]))
+        {
+            builder.Insert(0, '_');
+        }
+
+        return builder.ToString();
     }
 
     private static void ReportInvalidDelegate(IEventSymbol evt, SourceProductionContext context)

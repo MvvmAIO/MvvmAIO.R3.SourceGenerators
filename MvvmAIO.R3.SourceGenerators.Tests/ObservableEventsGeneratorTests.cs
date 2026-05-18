@@ -183,6 +183,90 @@ public sealed class ObservableEventsGeneratorTests
         Assert.Contains("ValueChanged", snapshot);
     }
 
+    [Fact]
+    public void Generates_FromEvents_wrapper_for_generic_constraints()
+    {
+        const string source = """
+            namespace Demo;
+
+            public class BaseSource
+            {
+                public event System.Action? BaseChanged;
+            }
+
+            public interface IFirst
+            {
+                event System.EventHandler<System.EventArgs>? FirstChanged;
+            }
+
+            public interface ISecond
+            {
+                event System.Action<int>? SecondChanged;
+            }
+
+            public static class Usage
+            {
+                public static void Run<TSource>(TSource source)
+                    where TSource : BaseSource, IFirst, ISecond
+                {
+                    _ = source.FromEvents().BaseChanged;
+                    _ = source.FromEvents().FirstChanged;
+                    _ = source.FromEvents().SecondChanged;
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new ObservableEventsGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("where TSource : global::Demo.BaseSource, global::Demo.IFirst, global::Demo.ISecond", snapshot);
+        Assert.Contains("((global::Demo.BaseSource)_sender).BaseChanged", snapshot);
+        Assert.Contains("((global::Demo.IFirst)_sender).FirstChanged", snapshot);
+        Assert.Contains("((global::Demo.ISecond)_sender).SecondChanged", snapshot);
+    }
+
+    [Fact]
+    public void Generates_FromEventHandlers_wrapper_for_generic_constraints()
+    {
+        const string source = """
+            namespace Demo;
+
+            public class BaseSource
+            {
+                public event System.EventHandler<System.EventArgs>? BaseChanged;
+            }
+
+            public interface IFirst
+            {
+                event System.EventHandler<System.EventArgs>? FirstChanged;
+            }
+
+            public static class Usage
+            {
+                public static void Run<TSource>(TSource source)
+                    where TSource : BaseSource, IFirst
+                {
+                    _ = source.FromEventHandlers().BaseChanged;
+                    _ = source.FromEventHandlers().FirstChanged;
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new ObservableEventsGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("where TSource : global::Demo.BaseSource, global::Demo.IFirst", snapshot);
+        Assert.Contains("global::R3.Observable.FromEventHandler<global::System.EventArgs>", snapshot);
+        Assert.Contains("((global::Demo.BaseSource)_sender).BaseChanged", snapshot);
+        Assert.Contains("((global::Demo.IFirst)_sender).FirstChanged", snapshot);
+    }
+
     private const string AvaloniaStubs = """
         namespace Avalonia.Interactivity
         {
