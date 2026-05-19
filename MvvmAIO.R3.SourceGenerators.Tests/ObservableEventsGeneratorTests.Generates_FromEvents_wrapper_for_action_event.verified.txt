@@ -10,13 +10,13 @@ using R3;
 namespace R3.SourceGenerators;
 internal static partial class ObservableEventsBootstrapExtensions
 {
-    public static Demo_ClickSourceFromEventObservable FromEvents(this global::Demo.ClickSource source) => new Demo_ClickSourceFromEventObservable(source);
+    public static IClickSourceEvents FromEvents(this global::Demo.ClickSource source) => new ClickSourceEventsImpl(source);
 }
 
-internal class Demo_ClickSourceFromEventObservable
+internal sealed class ClickSourceEventsImpl : IClickSourceEvents
 {
     private readonly global::Demo.ClickSource _sender;
-    internal Demo_ClickSourceFromEventObservable(global::Demo.ClickSource sender)
+    internal ClickSourceEventsImpl(global::Demo.ClickSource sender)
     {
         _sender = sender;
     }
@@ -25,6 +25,17 @@ internal class Demo_ClickSourceFromEventObservable
     /// <inheritdoc cref = "global::Demo.ClickSource.Click"/>
     /// </summary>
     public global::R3.Observable<global::R3.Unit> Click => global::R3.Observable.FromEvent<global::System.Action?, global::R3.Unit>(h => () => h(global::R3.Unit.Default), e => _sender.Click += e, e => _sender.Click -= e, default);
+}
+
+--- EventInterfaces.FromEvents.g.cs ---
+#nullable enable
+
+using R3;
+
+namespace R3.SourceGenerators;
+internal interface IClickSourceEvents
+{
+    global::R3.Observable<global::R3.Unit> Click { get; }
 }
 
 --- R3.SourceGenerators.NullEvents.g.cs ---

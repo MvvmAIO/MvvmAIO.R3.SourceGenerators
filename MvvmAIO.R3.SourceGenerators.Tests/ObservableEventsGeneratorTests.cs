@@ -226,6 +226,10 @@ public sealed class ObservableEventsGeneratorTests
         Assert.Contains("((global::Demo.BaseSource)_sender).BaseChanged", snapshot);
         Assert.Contains("((global::Demo.IFirst)_sender).FirstChanged", snapshot);
         Assert.Contains("((global::Demo.ISecond)_sender).SecondChanged", snapshot);
+        Assert.Contains("IBaseSource_First_SecondEvents", snapshot);
+        Assert.Contains("IBaseSourceEvents", snapshot);
+        Assert.Contains("IFirstEvents", snapshot);
+        Assert.Contains("ISecondEvents", snapshot);
     }
 
     [Fact]
@@ -265,6 +269,58 @@ public sealed class ObservableEventsGeneratorTests
         Assert.Contains("global::R3.Observable.FromEventHandler<global::System.EventArgs>", snapshot);
         Assert.Contains("((global::Demo.BaseSource)_sender).BaseChanged", snapshot);
         Assert.Contains("((global::Demo.IFirst)_sender).FirstChanged", snapshot);
+        Assert.Contains("IBaseSource_FirstEventHandlers", snapshot);
+    }
+
+    [Fact]
+    public void Generates_interface_hierarchy_for_derived_class()
+    {
+        const string source = """
+            namespace Demo;
+
+            public class BaseSource
+            {
+                public event System.Action? BaseChanged;
+            }
+
+            public interface INotify
+            {
+                event System.EventHandler<System.EventArgs>? Notified;
+            }
+
+            public class DerivedSource : BaseSource, INotify
+            {
+                public event System.Action<int>? DerivedChanged;
+                public event System.EventHandler<System.EventArgs>? Notified;
+            }
+
+            public static class Usage
+            {
+                public static void Run(DerivedSource s)
+                {
+                    _ = s.FromEvents().BaseChanged;
+                    _ = s.FromEvents().DerivedChanged;
+                    _ = s.FromEvents().Notified;
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new ObservableEventsGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+
+        Assert.Contains("interface IBaseSourceEvents", snapshot);
+        Assert.Contains("interface INotifyEvents", snapshot);
+        Assert.Contains("interface IDerivedSourceEvents : IBaseSourceEvents", snapshot);
+        Assert.Contains("class DerivedSourceEventsImpl : IDerivedSourceEvents", snapshot);
+        Assert.Contains("IDerivedSourceEvents FromEvents(this global::Demo.DerivedSource source)", snapshot);
+
+        Assert.Contains("DerivedChanged", snapshot);
+        Assert.Contains("BaseChanged", snapshot);
+        Assert.Contains("Notified", snapshot);
     }
 
     private const string AvaloniaStubs = """

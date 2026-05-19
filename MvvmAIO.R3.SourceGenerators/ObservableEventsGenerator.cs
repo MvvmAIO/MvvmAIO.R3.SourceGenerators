@@ -101,41 +101,16 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(inputs, static (spc, input) =>
         {
             var targets = CollectObservableEventTargets(input.Compilation, input.Candidates, input.UseWpf);
-            foreach (var type in targets.FromEventsTypes)
-            {
-                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromEvents, input.UseWpf);
-                if (!string.IsNullOrWhiteSpace(source))
-                {
-                    spc.AddSource($"{type.GetSafeHintName()}.FromEvents.g.cs", SourceText.From(source, Encoding.UTF8));
-                }
-            }
 
-            foreach (var type in targets.FromEventHandlersTypes)
-            {
-                var source = GenerateObservableSourceForType(type, input.Compilation, spc, ObservableEventsEntryKind.FromEventHandlers, input.UseWpf);
-                if (!string.IsNullOrWhiteSpace(source))
-                {
-                    spc.AddSource($"{type.GetSafeHintName()}.FromEventHandlers.g.cs", SourceText.From(source, Encoding.UTF8));
-                }
-            }
+            EmitInterfaceBasedSources(
+                targets.FromEventsTypes,
+                targets.FromEventsGenericConstraintTargets,
+                input.Compilation, spc, ObservableEventsEntryKind.FromEvents);
 
-            foreach (var target in targets.FromEventsGenericConstraintTargets)
-            {
-                var source = GenerateObservableSourceForGenericConstraintTarget(target, input.Compilation, spc, ObservableEventsEntryKind.FromEvents);
-                if (!string.IsNullOrWhiteSpace(source))
-                {
-                    spc.AddSource($"{GetGenericConstraintTargetHintName(target)}.FromEvents.g.cs", SourceText.From(source, Encoding.UTF8));
-                }
-            }
-
-            foreach (var target in targets.FromEventHandlersGenericConstraintTargets)
-            {
-                var source = GenerateObservableSourceForGenericConstraintTarget(target, input.Compilation, spc, ObservableEventsEntryKind.FromEventHandlers);
-                if (!string.IsNullOrWhiteSpace(source))
-                {
-                    spc.AddSource($"{GetGenericConstraintTargetHintName(target)}.FromEventHandlers.g.cs", SourceText.From(source, Encoding.UTF8));
-                }
-            }
+            EmitInterfaceBasedSources(
+                targets.FromEventHandlersTypes,
+                targets.FromEventHandlersGenericConstraintTargets,
+                input.Compilation, spc, ObservableEventsEntryKind.FromEventHandlers);
 
             foreach (var type in targets.FromRoutedEventsTypes)
             {
@@ -315,6 +290,26 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         }
 
         public INamedTypeSymbol ReceiverType { get; }
+    }
+
+    private sealed class EventInterfaceDescriptor
+    {
+        public EventInterfaceDescriptor(
+            INamedTypeSymbol sourceType,
+            string interfaceName,
+            ImmutableArray<IEventSymbol> exclusiveEvents,
+            ImmutableArray<INamedTypeSymbol> parentTypes)
+        {
+            SourceType = sourceType;
+            InterfaceName = interfaceName;
+            ExclusiveEvents = exclusiveEvents;
+            ParentTypes = parentTypes;
+        }
+
+        public INamedTypeSymbol SourceType { get; }
+        public string InterfaceName { get; set; }
+        public ImmutableArray<IEventSymbol> ExclusiveEvents { get; }
+        public ImmutableArray<INamedTypeSymbol> ParentTypes { get; }
     }
 
     private static ObservableEventTargetSets CollectObservableEventTargets(
@@ -1243,6 +1238,564 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         }
 
         return byName.Values.OrderBy(static e => e.Name, System.StringComparer.Ordinal);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    //  Interface-based generation pipeline (FromEvents / FromEventHandlers)
+    // ────────────────────────────────────────────────────────────────
+
+    private static void EmitInterfaceBasedSources(
+        ImmutableArray<INamedTypeSymbol> callSiteTypes,
+        ImmutableArray<GenericConstraintTarget> genericConstraintTargets,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
+    {
+        var allTypes = callSiteTypes.AddRange(
+            genericConstraintTargets.SelectMany(static t => t.ConstraintTypes)
+                .Select(static t => t.IsGenericType ? (INamedTypeSymbol)t.OriginalDefinition : t));
+
+        var hierarchy = BuildEventInterfaceHierarchy(allTypes, entryKind);
+        if (hierarchy.Count == 0 && genericConstraintTargets.Length == 0)
+            return;
+
+        var kindTag = entryKind == ObservableEventsEntryKind.FromEvents ? "FromEvents" : "FromEventHandlers";
+
+        if (hierarchy.Count > 0)
+        {
+            var interfacesSource = GenerateEventInterfacesSource(hierarchy, compilation, context, entryKind);
+            if (!string.IsNullOrWhiteSpace(interfacesSource))
+                context.AddSource($"EventInterfaces.{kindTag}.g.cs", SourceText.From(interfacesSource, Encoding.UTF8));
+        }
+
+        foreach (var type in callSiteTypes)
+        {
+            var source = GenerateEventImplAndExtensionSource(type, hierarchy, compilation, context, entryKind);
+            if (!string.IsNullOrWhiteSpace(source))
+                context.AddSource($"{type.GetSafeHintName()}.{kindTag}.g.cs", SourceText.From(source, Encoding.UTF8));
+        }
+
+        foreach (var target in genericConstraintTargets)
+        {
+            var source = GenerateGenericConstraintEventSource(target, hierarchy, compilation, context, entryKind);
+            if (!string.IsNullOrWhiteSpace(source))
+                context.AddSource($"{GetGenericConstraintTargetHintName(target)}.{kindTag}.g.cs", SourceText.From(source, Encoding.UTF8));
+        }
+    }
+
+    // ── Hierarchy building ──────────────────────────────────────────
+
+    private static Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> BuildEventInterfaceHierarchy(
+        ImmutableArray<INamedTypeSymbol> seedTypes,
+        ObservableEventsEntryKind entryKind)
+    {
+        var result = new Dictionary<INamedTypeSymbol, EventInterfaceDescriptor>(SymbolEqualityComparer.Default);
+        foreach (var type in seedTypes)
+            ExpandForInterfaces(type, result, entryKind);
+        ResolveInterfaceNameCollisions(result);
+        return result;
+    }
+
+    /// <returns>
+    /// Interface source types reachable through <paramref name="type"/>.
+    /// If the type gets its own interface, returns just itself.
+    /// If the type is a pass-through (no own events), returns its ancestor interfaces.
+    /// </returns>
+    private static ImmutableArray<INamedTypeSymbol> ExpandForInterfaces(
+        INamedTypeSymbol type,
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> result,
+        ObservableEventsEntryKind entryKind)
+    {
+        if (result.ContainsKey(type))
+            return ImmutableArray.Create(type);
+        if (type.SpecialType == SpecialType.System_Object)
+            return ImmutableArray<INamedTypeSymbol>.Empty;
+
+        var parentTypes = new List<INamedTypeSymbol>();
+        foreach (var parent in GetDirectBaseTypes(type))
+        {
+            var parentDef = parent.IsGenericType ? (INamedTypeSymbol)parent.OriginalDefinition : parent;
+            var contribution = ExpandForInterfaces(parentDef, result, entryKind);
+            foreach (var c in contribution)
+            {
+                if (!parentTypes.Contains(c, SymbolEqualityComparer.Default))
+                    parentTypes.Add(c);
+            }
+        }
+
+        var declaredEvents = type.GetMembers()
+            .OfType<IEventSymbol>()
+            .Where(static e => e is
+            {
+                IsStatic: false,
+                DeclaredAccessibility: Accessibility.Public,
+                IsOverride: false,
+            } && e.ExplicitInterfaceImplementations.IsEmpty)
+            .ToList();
+
+        var parentEventNames = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var pt in parentTypes)
+        {
+            if (result.TryGetValue(pt, out var pd))
+                CollectAllInterfaceEventNames(pd, result, parentEventNames);
+        }
+
+        var exclusiveEvents = declaredEvents
+            .Where(e => !parentEventNames.Contains(e.Name))
+            .OrderBy(static e => e.Name, System.StringComparer.Ordinal)
+            .ToImmutableArray();
+
+        if (exclusiveEvents.Length == 0 && parentTypes.Count == 0)
+            return ImmutableArray<INamedTypeSymbol>.Empty;
+
+        var ifaceName = ComputeRawEventInterfaceName(type, entryKind);
+        result[type] = new EventInterfaceDescriptor(type, ifaceName, exclusiveEvents, parentTypes.ToImmutableArray());
+        return ImmutableArray.Create(type);
+    }
+
+    private static IEnumerable<INamedTypeSymbol> GetDirectBaseTypes(INamedTypeSymbol type)
+    {
+        if (type.TypeKind != TypeKind.Interface
+            && type.BaseType is { SpecialType: not SpecialType.System_Object } baseType)
+        {
+            yield return baseType;
+        }
+
+        foreach (var iface in type.Interfaces)
+            yield return iface;
+    }
+
+    private static void CollectAllInterfaceEventNames(
+        EventInterfaceDescriptor descriptor,
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy,
+        System.Collections.Generic.HashSet<string> names)
+    {
+        foreach (var evt in descriptor.ExclusiveEvents)
+            names.Add(evt.Name);
+        foreach (var parentType in descriptor.ParentTypes)
+        {
+            if (hierarchy.TryGetValue(parentType, out var pd))
+                CollectAllInterfaceEventNames(pd, hierarchy, names);
+        }
+    }
+
+    // ── Interface naming ────────────────────────────────────────────
+
+    private static string ComputeRawEventInterfaceName(INamedTypeSymbol type, ObservableEventsEntryKind entryKind)
+    {
+        var suffix = entryKind == ObservableEventsEntryKind.FromEvents ? "Events" : "EventHandlers";
+        var name = type.Name;
+        if (type.TypeKind == TypeKind.Interface && name.Length >= 2 && name[0] == 'I' && char.IsUpper(name[1]))
+            return $"{name}{suffix}";
+        return $"I{name}{suffix}";
+    }
+
+    private static void ResolveInterfaceNameCollisions(
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy)
+    {
+        var byName = new Dictionary<string, List<INamedTypeSymbol>>(System.StringComparer.Ordinal);
+        foreach (var kvp in hierarchy)
+        {
+            if (!byName.TryGetValue(kvp.Value.InterfaceName, out var list))
+            {
+                list = new List<INamedTypeSymbol>();
+                byName[kvp.Value.InterfaceName] = list;
+            }
+
+            list.Add(kvp.Key);
+        }
+
+        foreach (var group in byName.Where(static g => g.Value.Count > 1))
+        {
+            foreach (var type in group.Value)
+            {
+                var desc = hierarchy[type];
+                var nsPrefix = type.ContainingNamespace is { IsGlobalNamespace: false } ns
+                    ? ns.ToDisplayString().Replace('.', '_')
+                    : string.Empty;
+                var prefix = string.IsNullOrEmpty(nsPrefix) ? desc.InterfaceName : $"I{nsPrefix}_{type.Name}";
+                var suffix = desc.InterfaceName.EndsWith("Events", System.StringComparison.Ordinal)
+                    ? "Events"
+                    : "EventHandlers";
+                desc.InterfaceName = $"{prefix}{suffix}";
+            }
+        }
+    }
+
+    private static string GetEventImplName(INamedTypeSymbol type, ObservableEventsEntryKind entryKind)
+    {
+        var suffix = entryKind == ObservableEventsEntryKind.FromEvents ? "EventsImpl" : "EventHandlersImpl";
+        return $"{type.Name}{suffix}";
+    }
+
+    // ── Interface property type ─────────────────────────────────────
+
+    private static string? GetEventInterfacePropertyType(
+        IEventSymbol evt,
+        ObservableEventsEntryKind entryKind,
+        Compilation compilation)
+    {
+        if (evt.Type is not INamedTypeSymbol delegateType
+            || delegateType.DelegateInvokeMethod is not IMethodSymbol invoke
+            || !invoke.ReturnsVoid)
+            return null;
+
+        if (entryKind == ObservableEventsEntryKind.FromEvents)
+            return GetObservableReturnType(invoke.Parameters);
+
+        if (IsClassicSystemEventHandler(delegateType, compilation, out var genericEventArgs))
+        {
+            return genericEventArgs is null
+                ? "global::R3.Observable<(object? sender, global::System.EventArgs e)>"
+                : $"global::R3.Observable<(object? sender, {QualifiedType(genericEventArgs)} e)>";
+        }
+
+        if (IsLegacySenderReceiverDelegate(delegateType, invoke, compilation))
+            return GetFromEventHandlersSenderReceiverReturnType(invoke.Parameters);
+
+        return null;
+    }
+
+    // ── Interfaces source file ──────────────────────────────────────
+
+    private static string GenerateEventInterfacesSource(
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
+    {
+        var unit = SyntaxFactory.CompilationUnit()
+            .AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("R3")));
+
+        var interfaces = new List<MemberDeclarationSyntax>();
+        foreach (var desc in hierarchy.Values.OrderBy(static d => d.InterfaceName, System.StringComparer.Ordinal))
+        {
+            var iface = CreateEventInterface(desc, hierarchy, compilation, entryKind);
+            if (iface is not null)
+                interfaces.Add(iface);
+        }
+
+        if (interfaces.Count == 0)
+            return string.Empty;
+
+        var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
+            .AddMembers(interfaces.ToArray());
+        unit = unit.AddMembers(ns);
+        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+    }
+
+    private static InterfaceDeclarationSyntax? CreateEventInterface(
+        EventInterfaceDescriptor descriptor,
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy,
+        Compilation compilation,
+        ObservableEventsEntryKind entryKind)
+    {
+        var type = descriptor.SourceType;
+        var iface = SyntaxFactory.InterfaceDeclaration(descriptor.InterfaceName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword));
+
+        if (type.IsGenericType)
+        {
+            iface = iface.WithTypeParameterList(
+                SyntaxFactory.TypeParameterList(
+                    SyntaxFactory.SeparatedList(
+                        type.TypeParameters.Select(static tp => SyntaxFactory.TypeParameter(tp.Name)))));
+        }
+
+        var bases = descriptor.ParentTypes
+            .Select(pt =>
+            {
+                var ptDef = pt.IsGenericType ? (INamedTypeSymbol)pt.OriginalDefinition : pt;
+                if (!hierarchy.TryGetValue(ptDef, out var pd)) return null;
+                return GetParentInterfaceReference(pd, pt);
+            })
+            .Where(static n => n is not null)
+            .OrderBy(static n => n, System.StringComparer.Ordinal)
+            .Select(static n => (BaseTypeSyntax)SyntaxFactory.SimpleBaseType(SyntaxFactory.ParseTypeName(n!)))
+            .ToArray();
+
+        if (bases.Length > 0)
+            iface = iface.AddBaseListTypes(bases);
+
+        var props = new List<MemberDeclarationSyntax>();
+        foreach (var evt in descriptor.ExclusiveEvents)
+        {
+            var returnType = GetEventInterfacePropertyType(evt, entryKind, compilation);
+            if (returnType is null) continue;
+            props.Add(
+                SyntaxFactory.PropertyDeclaration(SyntaxFactory.ParseTypeName(returnType), evt.Name)
+                    .AddAccessorListAccessors(
+                        SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                            .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))));
+        }
+
+        if (props.Count == 0 && bases.Length == 0)
+            return null;
+
+        return iface.AddMembers(props.ToArray());
+    }
+
+    private static string GetParentInterfaceReference(EventInterfaceDescriptor parentDesc, INamedTypeSymbol constructedParentType)
+    {
+        var name = parentDesc.InterfaceName;
+        if (constructedParentType.IsGenericType && constructedParentType.TypeArguments.Length > 0)
+            name += $"<{string.Join(", ", constructedParentType.TypeArguments.Select(static ta => QualifiedType(ta)))}>";
+        return name;
+    }
+
+    // ── Impl class + extension method source file ───────────────────
+
+    private static string GenerateEventImplAndExtensionSource(
+        INamedTypeSymbol type,
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
+    {
+        if (!hierarchy.TryGetValue(type, out var desc))
+            return string.Empty;
+
+        var implName = GetEventImplName(type, entryKind);
+        var typeParamList = type.IsGenericType
+            ? $"<{string.Join(", ", type.TypeParameters.Select(static tp => tp.Name))}>"
+            : string.Empty;
+        var interfaceRef = $"{desc.InterfaceName}{typeParamList}";
+        var implRef = $"{implName}{typeParamList}";
+        var qualifiedSender = QualifiedType(type);
+
+        var unit = SyntaxFactory.CompilationUnit()
+            .AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("R3")));
+
+        var methodName = entryKind == ObservableEventsEntryKind.FromEvents
+            ? FromEventsEntryMethodName
+            : FromEventHandlersEntryMethodName;
+
+        var extensionSrc = $"public static {interfaceRef} {methodName}{typeParamList}(this {qualifiedSender} source) => new {implRef}(source);";
+        var extensionClass = SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.InternalKeyword),
+                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                SyntaxFactory.Token(SyntaxKind.PartialKeyword))
+            .AddMembers(SyntaxFactory.ParseMemberDeclaration(extensionSrc)!);
+
+        var implClass = CreateEventImplClass(type, desc, implName, hierarchy, compilation, context, entryKind);
+
+        var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
+            .AddMembers(extensionClass, implClass);
+        unit = unit.AddMembers(ns);
+        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ClassDeclarationSyntax CreateEventImplClass(
+        INamedTypeSymbol type,
+        EventInterfaceDescriptor descriptor,
+        string implName,
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
+    {
+        var typeParamList = type.IsGenericType
+            ? $"<{string.Join(", ", type.TypeParameters.Select(static tp => tp.Name))}>"
+            : string.Empty;
+        var interfaceRef = $"{descriptor.InterfaceName}{typeParamList}";
+
+        var classDecl = SyntaxFactory.ClassDeclaration(implName)
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.InternalKeyword),
+                SyntaxFactory.Token(SyntaxKind.SealedKeyword))
+            .AddBaseListTypes(SyntaxFactory.SimpleBaseType(SyntaxFactory.ParseTypeName(interfaceRef)));
+
+        if (type.IsGenericType)
+        {
+            classDecl = classDecl.WithTypeParameterList(
+                SyntaxFactory.TypeParameterList(
+                    SyntaxFactory.SeparatedList(
+                        type.TypeParameters.Select(static tp => SyntaxFactory.TypeParameter(tp.Name)))));
+        }
+
+        var senderType = SyntaxFactory.ParseTypeName(QualifiedType(type));
+        var field = SyntaxFactory.FieldDeclaration(
+                SyntaxFactory.VariableDeclaration(senderType)
+                    .AddVariables(SyntaxFactory.VariableDeclarator("_sender")))
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PrivateKeyword),
+                SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword));
+
+        var ctor = SyntaxFactory.ConstructorDeclaration(implName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("sender")).WithType(senderType))
+            .WithBody(SyntaxFactory.Block(SyntaxFactory.ParseStatement("_sender = sender;")));
+
+        var members = new List<MemberDeclarationSyntax> { field, ctor };
+        foreach (var (evt, accessor) in CollectAllEventsWithAccessor(type, hierarchy))
+        {
+            if (entryKind == ObservableEventsEntryKind.FromEvents)
+            {
+                if (TryCreateEventObservableProperty(evt, accessor, context, out var prop))
+                    members.Add(prop);
+            }
+            else if (TryCreateEventHandlerObservableProperty(evt, accessor, compilation, context, out var prop))
+            {
+                members.Add(prop);
+            }
+        }
+
+        return classDecl.AddMembers(members.ToArray());
+    }
+
+    private static IEnumerable<(IEventSymbol Event, string Accessor)> CollectAllEventsWithAccessor(
+        INamedTypeSymbol callSiteType,
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy)
+    {
+        var accessible = new System.Collections.Generic.HashSet<string>(
+            GetPublicInstanceEventsFromTypeAndBases(callSiteType).Select(static e => e.Name),
+            System.StringComparer.Ordinal);
+        var result = new Dictionary<string, (IEventSymbol, string)>(System.StringComparer.Ordinal);
+        if (hierarchy.TryGetValue(callSiteType, out var desc))
+            CollectEventsRecursive(desc, hierarchy, accessible, result);
+        return result.Values.OrderBy(static x => x.Item1.Name, System.StringComparer.Ordinal);
+    }
+
+    private static void CollectEventsRecursive(
+        EventInterfaceDescriptor desc,
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy,
+        System.Collections.Generic.HashSet<string> accessible,
+        Dictionary<string, (IEventSymbol, string)> result)
+    {
+        foreach (var evt in desc.ExclusiveEvents)
+        {
+            if (result.ContainsKey(evt.Name)) continue;
+            var accessor = accessible.Contains(evt.Name)
+                ? $"_sender.{evt.Name}"
+                : $"(({QualifiedType(evt.ContainingType)})_sender).{evt.Name}";
+            result[evt.Name] = (evt, accessor);
+        }
+
+        foreach (var parentType in desc.ParentTypes)
+        {
+            if (hierarchy.TryGetValue(parentType, out var pd))
+                CollectEventsRecursive(pd, hierarchy, accessible, result);
+        }
+    }
+
+    // ── Generic constraint interface-based generation ────────────────
+
+    private static string GenerateGenericConstraintEventSource(
+        GenericConstraintTarget target,
+        Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
+    {
+        var suffix = entryKind == ObservableEventsEntryKind.FromEvents ? "Events" : "EventHandlers";
+        var constraintParts = target.ConstraintTypes.Select(static t =>
+        {
+            var n = t.Name;
+            return t.TypeKind == TypeKind.Interface && n.Length >= 2 && n[0] == 'I' && char.IsUpper(n[1])
+                ? n.Substring(1)
+                : n;
+        });
+        var combinedIfaceName = $"I{string.Join("_", constraintParts)}{suffix}";
+        var implName = $"{string.Join("_", constraintParts)}{suffix}Impl";
+
+        var parentBases = new List<string>();
+        foreach (var ct in target.ConstraintTypes)
+        {
+            var def = ct.IsGenericType ? (INamedTypeSymbol)ct.OriginalDefinition : ct;
+            if (hierarchy.TryGetValue(def, out var pd))
+                parentBases.Add(GetParentInterfaceReference(pd, ct));
+        }
+
+        var unit = SyntaxFactory.CompilationUnit()
+            .AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("R3")));
+
+        var members = new List<MemberDeclarationSyntax>();
+
+        var combinedIface = SyntaxFactory.InterfaceDeclaration(combinedIfaceName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword));
+        if (parentBases.Count > 0)
+        {
+            combinedIface = combinedIface.AddBaseListTypes(
+                parentBases.Select(static n => (BaseTypeSyntax)SyntaxFactory.SimpleBaseType(SyntaxFactory.ParseTypeName(n))).ToArray());
+        }
+
+        members.Add(combinedIface);
+
+        var methodName = entryKind == ObservableEventsEntryKind.FromEvents
+            ? FromEventsEntryMethodName
+            : FromEventHandlersEntryMethodName;
+        var extensionSrc = $$"""
+            public static {{combinedIfaceName}} {{methodName}}<TSource>(this TSource source)
+                {{GetGenericConstraintClause(target)}}
+                => new {{implName}}<TSource>(source);
+            """;
+        members.Add(
+            SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
+                .AddModifiers(
+                    SyntaxFactory.Token(SyntaxKind.InternalKeyword),
+                    SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                    SyntaxFactory.Token(SyntaxKind.PartialKeyword))
+                .AddMembers(SyntaxFactory.ParseMemberDeclaration(extensionSrc)!));
+
+        members.Add(CreateGenericConstraintImplClass(
+            target, combinedIfaceName, implName, compilation, context, entryKind));
+
+        var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
+            .AddMembers(members.ToArray());
+        unit = unit.AddMembers(ns);
+        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ClassDeclarationSyntax CreateGenericConstraintImplClass(
+        GenericConstraintTarget target,
+        string combinedIfaceName,
+        string implName,
+        Compilation compilation,
+        SourceProductionContext context,
+        ObservableEventsEntryKind entryKind)
+    {
+        var classDecl = SyntaxFactory.ClassDeclaration(implName)
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.InternalKeyword),
+                SyntaxFactory.Token(SyntaxKind.SealedKeyword))
+            .WithTypeParameterList(
+                SyntaxFactory.TypeParameterList(
+                    SyntaxFactory.SingletonSeparatedList(SyntaxFactory.TypeParameter("TSource"))))
+            .AddConstraintClauses(CreateGenericConstraintClauseSyntax(target))
+            .AddBaseListTypes(SyntaxFactory.SimpleBaseType(SyntaxFactory.ParseTypeName(combinedIfaceName)));
+
+        var senderType = SyntaxFactory.ParseTypeName("TSource");
+        var field = SyntaxFactory.FieldDeclaration(
+                SyntaxFactory.VariableDeclaration(senderType)
+                    .AddVariables(SyntaxFactory.VariableDeclarator("_sender")))
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PrivateKeyword),
+                SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword));
+
+        var ctor = SyntaxFactory.ConstructorDeclaration(implName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("sender")).WithType(senderType))
+            .WithBody(SyntaxFactory.Block(SyntaxFactory.ParseStatement("_sender = sender;")));
+
+        var memberList = new List<MemberDeclarationSyntax> { field, ctor };
+        foreach (var evt in GetGenericConstraintEvents(target))
+        {
+            var accessor = $"(({QualifiedType(evt.ContainingType)})_sender).{evt.Name}";
+            if (entryKind == ObservableEventsEntryKind.FromEvents)
+            {
+                if (TryCreateEventObservableProperty(evt, accessor, context, out var prop))
+                    memberList.Add(prop);
+            }
+            else if (TryCreateEventHandlerObservableProperty(evt, accessor, compilation, context, out var prop))
+            {
+                memberList.Add(prop);
+            }
+        }
+
+        return classDecl.AddMembers(memberList.ToArray());
     }
 
     private static ClassDeclarationSyntax CreateAvaloniaRoutedExtensionsClass(INamedTypeSymbol type, ObservableEventsEntryKind entryKind)
