@@ -22,7 +22,6 @@ public sealed class R3CommandAttribute : Attribute
 """;
 
     public const string ObservableEventsBootstrapExtensions = """
-#nullable enable
 namespace R3.SourceGenerators
 {
 internal static partial class ObservableEventsBootstrapExtensions
@@ -81,7 +80,6 @@ internal static partial class ObservableEventsBootstrapExtensions
 
     /// <summary>Bootstrap emitted when static ObservableEvents generation is disabled (<c>OBS_*</c> / <c>ObservableEventsStatics</c> not emitted).</summary>
     public const string ObservableEventsBootstrapExtensionsInstanceOnly = """
-#nullable enable
 namespace R3.SourceGenerators
 {
 internal static partial class ObservableEventsBootstrapExtensions
@@ -130,7 +128,6 @@ internal static partial class ObservableEventsBootstrapExtensions
 """;
 
     public const string NullEvents = """
-#nullable enable
 namespace R3.SourceGenerators
 {
 internal struct NullEvents
@@ -144,7 +141,6 @@ internal struct NullEvents
     /// per-type codegen appends nested <c>OBS_*</c> types (cold compile).
     /// </summary>
     public const string ObservableEventsStaticsShell = """
-#nullable enable
 namespace R3.SourceGenerators;
 
 public static partial class ObservableEventsStatics

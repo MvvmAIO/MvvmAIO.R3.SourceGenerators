@@ -21,7 +21,9 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
     {
         context.RegisterPostInitializationOutput(static ctx =>
         {
-            ctx.AddSource("MvvmAIO.R3.R3CommandAttribute.g.cs", SourceText.From(GeneratorSources.R3CommandAttribute, Encoding.UTF8));
+            ctx.AddSource(
+                "MvvmAIO.R3.R3CommandAttribute.g.cs",
+                SourceText.From(GeneratedSourceHeader.Apply(GeneratorSources.R3CommandAttribute), Encoding.UTF8));
         });
 
         var targets = context.SyntaxProvider.ForAttributeWithMetadataName(

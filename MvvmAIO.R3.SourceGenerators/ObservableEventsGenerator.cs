@@ -71,11 +71,14 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ctx.AddSource(
                 "R3.SourceGenerators.ObservableEventsBootstrapExtensions.g.cs",
                 SourceText.From(
-                    StaticObservableEventsGenerationEnabled
-                        ? GeneratorSources.ObservableEventsBootstrapExtensions
-                        : GeneratorSources.ObservableEventsBootstrapExtensionsInstanceOnly,
+                    GeneratedSourceHeader.Apply(
+                        StaticObservableEventsGenerationEnabled
+                            ? GeneratorSources.ObservableEventsBootstrapExtensions
+                            : GeneratorSources.ObservableEventsBootstrapExtensionsInstanceOnly),
                     Encoding.UTF8));
-            ctx.AddSource("R3.SourceGenerators.NullEvents.g.cs", SourceText.From(GeneratorSources.NullEvents, Encoding.UTF8));
+            ctx.AddSource(
+                "R3.SourceGenerators.NullEvents.g.cs",
+                SourceText.From(GeneratedSourceHeader.Apply(GeneratorSources.NullEvents), Encoding.UTF8));
         });
         RegisterObservableEventsStaticsShellPostInit(context);
 
@@ -161,7 +164,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         context.RegisterPostInitializationOutput(static ctx =>
             ctx.AddSource(
                 "R3.SourceGenerators.ObservableEventsStatics.g.cs",
-                SourceText.From(GeneratorSources.ObservableEventsStaticsShell, Encoding.UTF8)));
+                SourceText.From(GeneratedSourceHeader.Apply(GeneratorSources.ObservableEventsStaticsShell), Encoding.UTF8)));
 #pragma warning restore CS0162
     }
 
@@ -920,7 +923,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         unit = unit.AddMembers(nsMember);
 
         // Analyzer-generated translation units require an explicit `#nullable` directive before NRT punctuation (CS8669).
-        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
     }
 
     private static string GenerateObservableSourceForGenericConstraintTarget(
@@ -942,7 +945,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .AddMembers(members);
         unit = unit.AddMembers(nsMember);
 
-        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
     }
 
     private static string GenerateAttachedRoutedEventSourceForTarget(
@@ -960,8 +963,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ? "global::R3.Observable.FromEvent<global::System.EventHandler<TEventArgs>, TEventArgs>(h => (sender, e) => h(e), h => source.AddHandler(routedEvent, h, routes, handledEventsToo), h => source.RemoveHandler(routedEvent, h), default)"
             : "global::R3.Observable.FromEventHandler<TEventArgs>(h => source.AddHandler(routedEvent, h, routes, handledEventsToo), h => source.RemoveHandler(routedEvent, h), default)";
 
-        var source = $$"""
-            #nullable enable
+        var source = GeneratedSourceHeader.Apply($$"""
 
             using R3;
 
@@ -977,7 +979,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                     where TEventArgs : global::Avalonia.Interactivity.RoutedEventArgs
                     => {{expression}};
             }
-            """;
+            """);
 
         return source;
     }
@@ -1481,7 +1483,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
             .AddMembers(interfaces.ToArray());
         unit = unit.AddMembers(ns);
-        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
     }
 
     private static InterfaceDeclarationSyntax? CreateEventInterface(
@@ -1583,7 +1585,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
             .AddMembers(extensionClass, implClass);
         unit = unit.AddMembers(ns);
-        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
     }
 
     private static ClassDeclarationSyntax CreateEventImplClass(
@@ -1745,7 +1747,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
             .AddMembers(members.ToArray());
         unit = unit.AddMembers(ns);
-        return "#nullable enable\n\n" + unit.NormalizeWhitespace().ToFullString();
+        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
     }
 
     private static ClassDeclarationSyntax CreateGenericConstraintImplClass(
