@@ -62,7 +62,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(
             (SymbolDisplayMiscellaneousOptions)(1 << 6));
 
-    private static string QualifiedType(ITypeSymbol type) => type.ToDisplayString(FullyQualifiedNullableFormat);
+    internal static string QualifiedType(ITypeSymbol type) => type.ToDisplayString(FullyQualifiedNullableFormat);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -71,14 +71,15 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ctx.AddSource(
                 "R3.SourceGenerators.ObservableEventsBootstrapExtensions.g.cs",
                 SourceText.From(
-                    GeneratedSourceHeader.Apply(
-                        StaticObservableEventsGenerationEnabled
-                            ? GeneratorSources.ObservableEventsBootstrapExtensions
-                            : GeneratorSources.ObservableEventsBootstrapExtensionsInstanceOnly),
+                    GeneratedSourceHeader.ToSource(
+                        GeneratorBootstrapSyntaxFactory.CreateObservableEventsBootstrapExtensionsCompilationUnit(
+                            StaticObservableEventsGenerationEnabled)),
                     Encoding.UTF8));
             ctx.AddSource(
                 "R3.SourceGenerators.NullEvents.g.cs",
-                SourceText.From(GeneratedSourceHeader.Apply(GeneratorSources.NullEvents), Encoding.UTF8));
+                SourceText.From(
+                    GeneratedSourceHeader.ToSource(GeneratorBootstrapSyntaxFactory.CreateNullEventsCompilationUnit()),
+                    Encoding.UTF8));
         });
         RegisterObservableEventsStaticsShellPostInit(context);
 
@@ -164,7 +165,10 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         context.RegisterPostInitializationOutput(static ctx =>
             ctx.AddSource(
                 "R3.SourceGenerators.ObservableEventsStatics.g.cs",
-                SourceText.From(GeneratedSourceHeader.Apply(GeneratorSources.ObservableEventsStaticsShell), Encoding.UTF8)));
+                SourceText.From(
+                    GeneratedSourceHeader.ToSource(
+                        GeneratorBootstrapSyntaxFactory.CreateObservableEventsStaticsShellCompilationUnit()),
+                    Encoding.UTF8)));
 #pragma warning restore CS0162
     }
 
@@ -923,7 +927,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         unit = unit.AddMembers(nsMember);
 
         // Analyzer-generated translation units require an explicit `#nullable` directive before NRT punctuation (CS8669).
-        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
+        return GeneratedSourceHeader.ToSource(unit);
     }
 
     private static string GenerateObservableSourceForGenericConstraintTarget(
@@ -945,48 +949,90 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .AddMembers(members);
         unit = unit.AddMembers(nsMember);
 
-        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
+        return GeneratedSourceHeader.ToSource(unit);
     }
 
     private static string GenerateAttachedRoutedEventSourceForTarget(
         AttachedRoutedEventTarget target,
         ObservableEventsEntryKind entryKind)
     {
-        var receiverType = QualifiedType(target.ReceiverType);
+        var receiverType = SyntaxFactory.ParseTypeName(QualifiedType(target.ReceiverType));
         var observableMethod = entryKind == ObservableEventsEntryKind.FromAttachedRoutedEvent
             ? FromAttachedRoutedEventEntryMethodName
             : FromAttachedRoutedEventHandlerEntryMethodName;
         var returnType = entryKind == ObservableEventsEntryKind.FromAttachedRoutedEvent
-            ? "global::R3.Observable<TEventArgs>"
-            : "global::R3.Observable<(object? sender, TEventArgs e)>";
-        var expression = entryKind == ObservableEventsEntryKind.FromAttachedRoutedEvent
-            ? "global::R3.Observable.FromEvent<global::System.EventHandler<TEventArgs>, TEventArgs>(h => (sender, e) => h(e), h => source.AddHandler(routedEvent, h, routes, handledEventsToo), h => source.RemoveHandler(routedEvent, h), default)"
-            : "global::R3.Observable.FromEventHandler<TEventArgs>(h => source.AddHandler(routedEvent, h, routes, handledEventsToo), h => source.RemoveHandler(routedEvent, h), default)";
+            ? SyntaxFactory.ParseTypeName("global::R3.Observable<TEventArgs>")
+            : SyntaxFactory.ParseTypeName("global::R3.Observable<(object? sender, TEventArgs e)>");
 
-        var source = GeneratedSourceHeader.Apply($$"""
+        var routedEventParam = SyntaxFactory.IdentifierName("routedEvent");
+        var addHandler = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName("source"),
+                SyntaxFactory.GenericName(SyntaxFactory.Identifier("AddHandler"))
+                    .WithTypeArgumentList(
+                        SyntaxFactory.TypeArgumentList(
+                            SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
+                                SyntaxFactory.IdentifierName("TEventArgs"))))),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SeparatedList(
+                [
+                    SyntaxFactory.Argument(routedEventParam),
+                    SyntaxFactory.Argument(SyntaxFactory.IdentifierName("h")),
+                    SyntaxFactory.Argument(SyntaxFactory.IdentifierName("routes")),
+                    SyntaxFactory.Argument(SyntaxFactory.IdentifierName("handledEventsToo")),
+                ])));
 
-            using R3;
+        var removeHandler = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName("source"),
+                SyntaxFactory.GenericName(SyntaxFactory.Identifier("RemoveHandler"))
+                    .WithTypeArgumentList(
+                        SyntaxFactory.TypeArgumentList(
+                            SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
+                                SyntaxFactory.IdentifierName("TEventArgs"))))),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SeparatedList(
+                [
+                    SyntaxFactory.Argument(routedEventParam),
+                    SyntaxFactory.Argument(SyntaxFactory.IdentifierName("h")),
+                ])));
 
-            namespace R3.SourceGenerators;
+        var subscribeHandler = ObservableEventsSyntaxFactory.HandlerSubscriptionLambda(addHandler);
+        var unsubscribeHandler = ObservableEventsSyntaxFactory.HandlerSubscriptionLambda(removeHandler);
+        ExpressionSyntax body = entryKind == ObservableEventsEntryKind.FromAttachedRoutedEvent
+            ? ObservableEventsSyntaxFactory.ObservableFromEventInvocation(
+                SyntaxFactory.ParseTypeName("global::System.EventHandler<TEventArgs>"),
+                SyntaxFactory.IdentifierName("TEventArgs"),
+                ObservableEventsSyntaxFactory.FromEventHandlerFactorySenderAndArgs(),
+                subscribeHandler,
+                unsubscribeHandler)
+            : ObservableEventsSyntaxFactory.ObservableFromEventHandlerInvocation(
+                SyntaxFactory.IdentifierName("TEventArgs"),
+                subscribeHandler,
+                unsubscribeHandler);
 
-            internal static partial class ObservableEventsBootstrapExtensions
-            {
-                public static {{returnType}} {{observableMethod}}<TEventArgs>(
-                    this {{receiverType}} source,
-                    global::Avalonia.Interactivity.RoutedEvent<TEventArgs> routedEvent,
-                    global::Avalonia.Interactivity.RoutingStrategies routes = global::Avalonia.Interactivity.RoutingStrategies.Direct | global::Avalonia.Interactivity.RoutingStrategies.Bubble,
-                    bool handledEventsToo = false)
-                    where TEventArgs : global::Avalonia.Interactivity.RoutedEventArgs
-                    => {{expression}};
-            }
-            """);
+        var method = ObservableEventsSyntaxFactory.CreateAttachedRoutedEventMethod(
+            observableMethod,
+            returnType,
+            receiverType,
+            body);
 
-        return source;
+        var unit = SyntaxFactory.CompilationUnit()
+            .AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("R3")))
+            .AddMembers(
+                SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
+                    .AddMembers(
+                        ObservableEventsSyntaxFactory.BootstrapExtensionsClassDeclaration()
+                            .AddMembers(method)));
+
+        return GeneratedSourceHeader.ToSource(unit);
     }
 
     private static ClassDeclarationSyntax CreateExtensionsClass(INamedTypeSymbol type, ObservableEventsEntryKind entryKind)
     {
-        // Must match post-init class name in GeneratorSources.ObservableEventsBootstrapExtensions*:
+        // Must match post-init class name in GeneratorBootstrapSyntaxFactory:
         // concrete FromEvents(this T) merges into the same partial as FromEvents(this object?) so the IDE
         // resolves the specific overload (wrapper with event properties), not the NullEvents fallback.
         var entryMethod = entryKind switch
@@ -1013,18 +1059,17 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ? FromEventsEntryMethodName
             : FromEventHandlersEntryMethodName;
         var wrapperName = GetGenericConstraintWrapperName(target, entryKind);
-        var methodSource = $$"""
-            public static {{wrapperName}}<TSource> {{methodName}}<TSource>(this TSource source)
-                {{GetGenericConstraintClause(target)}}
-                => new {{wrapperName}}<TSource>(source);
-            """;
+        var method = ObservableEventsSyntaxFactory.CreateFromSenderExtensionMethod(
+            methodName,
+            ObservableEventsSyntaxFactory.NamedGenericType(wrapperName, "TSource"),
+            SyntaxFactory.ParseTypeName("TSource"),
+            ObservableEventsSyntaxFactory.NamedGenericType(wrapperName, "TSource"),
+            SyntaxFactory.TypeParameterList(
+                SyntaxFactory.SingletonSeparatedList(SyntaxFactory.TypeParameter("TSource"))),
+            SyntaxFactory.SingletonList(CreateGenericConstraintClauseSyntax(target)));
 
-        return SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
-            .AddModifiers(
-                SyntaxFactory.Token(SyntaxKind.InternalKeyword),
-                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
-                SyntaxFactory.Token(SyntaxKind.PartialKeyword))
-            .AddMembers(SyntaxFactory.ParseMemberDeclaration(methodSource)!);
+        return ObservableEventsSyntaxFactory.BootstrapExtensionsClassDeclaration()
+            .AddMembers(method);
     }
 
     private static MethodDeclarationSyntax CreateFromEventsMethod(INamedTypeSymbol type)
@@ -1203,12 +1248,14 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .AddParameterListParameters(
                 SyntaxFactory.Parameter(SyntaxFactory.Identifier("sender"))
                     .WithType(senderType))
-            .WithBody(SyntaxFactory.Block(SyntaxFactory.ParseStatement("_sender = sender;")));
+            .WithBody(SyntaxFactory.Block(ObservableEventsSyntaxFactory.SenderAssignmentStatement()));
 
         var members = new List<MemberDeclarationSyntax> { field, ctor };
         foreach (var evt in GetGenericConstraintEvents(target))
         {
-            var eventTarget = $"(({QualifiedType(evt.ContainingType)})_sender).{evt.Name}";
+            var eventTarget = ObservableEventsSyntaxFactory.CastSenderMemberAccess(
+                SyntaxFactory.ParseTypeName(QualifiedType(evt.ContainingType)),
+                evt.Name);
             if (entryKind == ObservableEventsEntryKind.FromEvents)
             {
                 if (TryCreateEventObservableProperty(evt, eventTarget, context, out var eventProperty))
@@ -1432,7 +1479,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
     // ── Interface property type ─────────────────────────────────────
 
-    private static string? GetEventInterfacePropertyType(
+    private static TypeSyntax? GetEventInterfacePropertyType(
         IEventSymbol evt,
         ObservableEventsEntryKind entryKind,
         Compilation compilation)
@@ -1443,17 +1490,18 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             return null;
 
         if (entryKind == ObservableEventsEntryKind.FromEvents)
-            return GetObservableReturnType(invoke.Parameters);
+            return ObservableEventsSyntaxFactory.GetObservableReturnTypeSyntax(invoke.Parameters);
 
         if (IsClassicSystemEventHandler(delegateType, compilation, out var genericEventArgs))
         {
-            return genericEventArgs is null
-                ? "global::R3.Observable<(object? sender, global::System.EventArgs e)>"
-                : $"global::R3.Observable<(object? sender, {QualifiedType(genericEventArgs)} e)>";
+            var eventArgsType = genericEventArgs is null
+                ? SyntaxFactory.ParseTypeName("global::System.EventArgs")
+                : SyntaxFactory.ParseTypeName(QualifiedType(genericEventArgs));
+            return ObservableEventsSyntaxFactory.R3ObservableSenderArgsTupleType(eventArgsType);
         }
 
         if (IsLegacySenderReceiverDelegate(delegateType, invoke, compilation))
-            return GetFromEventHandlersSenderReceiverReturnType(invoke.Parameters);
+            return ObservableEventsSyntaxFactory.GetFromEventHandlersSenderReceiverReturnTypeSyntax(invoke.Parameters);
 
         return null;
     }
@@ -1483,7 +1531,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
             .AddMembers(interfaces.ToArray());
         unit = unit.AddMembers(ns);
-        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
+        return GeneratedSourceHeader.ToSource(unit);
     }
 
     private static InterfaceDeclarationSyntax? CreateEventInterface(
@@ -1525,7 +1573,9 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             var returnType = GetEventInterfacePropertyType(evt, entryKind, compilation);
             if (returnType is null) continue;
             props.Add(
-                SyntaxFactory.PropertyDeclaration(SyntaxFactory.ParseTypeName(returnType), evt.Name)
+                SyntaxFactory.PropertyDeclaration(returnType, evt.Name)
+                    .WithLeadingTrivia(ObservableEventsSyntaxFactory.CreateEventInheritDocTrivia(
+                        $"{QualifiedType(evt.ContainingType)}.{evt.Name}"))
                     .AddAccessorListAccessors(
                         SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))));
@@ -1572,20 +1622,30 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ? FromEventsEntryMethodName
             : FromEventHandlersEntryMethodName;
 
-        var extensionSrc = $"public static {interfaceRef} {methodName}{typeParamList}(this {qualifiedSender} source) => new {implRef}(source);";
-        var extensionClass = SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
-            .AddModifiers(
-                SyntaxFactory.Token(SyntaxKind.InternalKeyword),
-                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
-                SyntaxFactory.Token(SyntaxKind.PartialKeyword))
-            .AddMembers(SyntaxFactory.ParseMemberDeclaration(extensionSrc)!);
+        TypeParameterListSyntax? extensionTypeParams = null;
+        if (type.IsGenericType)
+        {
+            extensionTypeParams = SyntaxFactory.TypeParameterList(
+                SyntaxFactory.SeparatedList(
+                    type.TypeParameters.Select(static tp => SyntaxFactory.TypeParameter(tp.Name))));
+        }
+
+        var extensionMethod = ObservableEventsSyntaxFactory.CreateFromSenderExtensionMethod(
+            methodName,
+            SyntaxFactory.ParseTypeName(interfaceRef),
+            SyntaxFactory.ParseTypeName(qualifiedSender),
+            SyntaxFactory.ParseTypeName(implRef),
+            extensionTypeParams);
+
+        var extensionClass = ObservableEventsSyntaxFactory.BootstrapExtensionsClassDeclaration()
+            .AddMembers(extensionMethod);
 
         var implClass = CreateEventImplClass(type, desc, implName, hierarchy, compilation, context, entryKind);
 
         var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
             .AddMembers(extensionClass, implClass);
         unit = unit.AddMembers(ns);
-        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
+        return GeneratedSourceHeader.ToSource(unit);
     }
 
     private static ClassDeclarationSyntax CreateEventImplClass(
@@ -1628,17 +1688,17 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
             .AddParameterListParameters(
                 SyntaxFactory.Parameter(SyntaxFactory.Identifier("sender")).WithType(senderType))
-            .WithBody(SyntaxFactory.Block(SyntaxFactory.ParseStatement("_sender = sender;")));
+            .WithBody(SyntaxFactory.Block(ObservableEventsSyntaxFactory.SenderAssignmentStatement()));
 
         var members = new List<MemberDeclarationSyntax> { field, ctor };
         foreach (var (evt, accessor) in CollectAllEventsWithAccessor(type, hierarchy))
         {
             if (entryKind == ObservableEventsEntryKind.FromEvents)
             {
-                if (TryCreateEventObservableProperty(evt, accessor, context, out var prop))
+                if (TryCreateEventObservableProperty(evt, accessor, context, out var prop, includeXmlDocumentation: false))
                     members.Add(prop);
             }
-            else if (TryCreateEventHandlerObservableProperty(evt, accessor, compilation, context, out var prop))
+            else if (TryCreateEventHandlerObservableProperty(evt, accessor, compilation, context, out var prop, includeXmlDocumentation: false))
             {
                 members.Add(prop);
             }
@@ -1647,14 +1707,14 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         return classDecl.AddMembers(members.ToArray());
     }
 
-    private static IEnumerable<(IEventSymbol Event, string Accessor)> CollectAllEventsWithAccessor(
+    private static IEnumerable<(IEventSymbol Event, ExpressionSyntax Accessor)> CollectAllEventsWithAccessor(
         INamedTypeSymbol callSiteType,
         Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy)
     {
         var accessible = new System.Collections.Generic.HashSet<string>(
             GetPublicInstanceEventsFromTypeAndBases(callSiteType).Select(static e => e.Name),
             System.StringComparer.Ordinal);
-        var result = new Dictionary<string, (IEventSymbol, string)>(System.StringComparer.Ordinal);
+        var result = new Dictionary<string, (IEventSymbol, ExpressionSyntax)>(System.StringComparer.Ordinal);
         if (hierarchy.TryGetValue(callSiteType, out var desc))
             CollectEventsRecursive(desc, hierarchy, accessible, result);
         return result.Values.OrderBy(static x => x.Item1.Name, System.StringComparer.Ordinal);
@@ -1664,14 +1724,16 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         EventInterfaceDescriptor desc,
         Dictionary<INamedTypeSymbol, EventInterfaceDescriptor> hierarchy,
         System.Collections.Generic.HashSet<string> accessible,
-        Dictionary<string, (IEventSymbol, string)> result)
+        Dictionary<string, (IEventSymbol, ExpressionSyntax)> result)
     {
         foreach (var evt in desc.ExclusiveEvents)
         {
             if (result.ContainsKey(evt.Name)) continue;
             var accessor = accessible.Contains(evt.Name)
-                ? $"_sender.{evt.Name}"
-                : $"(({QualifiedType(evt.ContainingType)})_sender).{evt.Name}";
+                ? ObservableEventsSyntaxFactory.SenderMemberAccess(evt.Name)
+                : ObservableEventsSyntaxFactory.CastSenderMemberAccess(
+                    SyntaxFactory.ParseTypeName(QualifiedType(evt.ContainingType)),
+                    evt.Name);
             result[evt.Name] = (evt, accessor);
         }
 
@@ -1728,18 +1790,17 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var methodName = entryKind == ObservableEventsEntryKind.FromEvents
             ? FromEventsEntryMethodName
             : FromEventHandlersEntryMethodName;
-        var extensionSrc = $$"""
-            public static {{combinedIfaceName}} {{methodName}}<TSource>(this TSource source)
-                {{GetGenericConstraintClause(target)}}
-                => new {{implName}}<TSource>(source);
-            """;
+        var extensionMethod = ObservableEventsSyntaxFactory.CreateFromSenderExtensionMethod(
+            methodName,
+            SyntaxFactory.ParseTypeName(combinedIfaceName),
+            SyntaxFactory.ParseTypeName("TSource"),
+            ObservableEventsSyntaxFactory.NamedGenericType(implName, "TSource"),
+            SyntaxFactory.TypeParameterList(
+                SyntaxFactory.SingletonSeparatedList(SyntaxFactory.TypeParameter("TSource"))),
+            SyntaxFactory.SingletonList(CreateGenericConstraintClauseSyntax(target)));
         members.Add(
-            SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
-                .AddModifiers(
-                    SyntaxFactory.Token(SyntaxKind.InternalKeyword),
-                    SyntaxFactory.Token(SyntaxKind.StaticKeyword),
-                    SyntaxFactory.Token(SyntaxKind.PartialKeyword))
-                .AddMembers(SyntaxFactory.ParseMemberDeclaration(extensionSrc)!));
+            ObservableEventsSyntaxFactory.BootstrapExtensionsClassDeclaration()
+                .AddMembers(extensionMethod));
 
         members.Add(CreateGenericConstraintImplClass(
             target, combinedIfaceName, implName, compilation, context, entryKind));
@@ -1747,7 +1808,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         var ns = SyntaxFactory.FileScopedNamespaceDeclaration(SyntaxFactory.ParseName(GeneratedNamespace))
             .AddMembers(members.ToArray());
         unit = unit.AddMembers(ns);
-        return GeneratedSourceHeader.Apply(unit.NormalizeWhitespace().ToFullString());
+        return GeneratedSourceHeader.ToSource(unit);
     }
 
     private static ClassDeclarationSyntax CreateGenericConstraintImplClass(
@@ -1780,18 +1841,20 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
             .AddParameterListParameters(
                 SyntaxFactory.Parameter(SyntaxFactory.Identifier("sender")).WithType(senderType))
-            .WithBody(SyntaxFactory.Block(SyntaxFactory.ParseStatement("_sender = sender;")));
+            .WithBody(SyntaxFactory.Block(ObservableEventsSyntaxFactory.SenderAssignmentStatement()));
 
         var memberList = new List<MemberDeclarationSyntax> { field, ctor };
         foreach (var evt in GetGenericConstraintEvents(target))
         {
-            var accessor = $"(({QualifiedType(evt.ContainingType)})_sender).{evt.Name}";
+            var accessor = ObservableEventsSyntaxFactory.CastSenderMemberAccess(
+                SyntaxFactory.ParseTypeName(QualifiedType(evt.ContainingType)),
+                evt.Name);
             if (entryKind == ObservableEventsEntryKind.FromEvents)
             {
-                if (TryCreateEventObservableProperty(evt, accessor, context, out var prop))
+                if (TryCreateEventObservableProperty(evt, accessor, context, out var prop, includeXmlDocumentation: false))
                     memberList.Add(prop);
             }
-            else if (TryCreateEventHandlerObservableProperty(evt, accessor, compilation, context, out var prop))
+            else if (TryCreateEventHandlerObservableProperty(evt, accessor, compilation, context, out var prop, includeXmlDocumentation: false))
             {
                 memberList.Add(prop);
             }
@@ -1806,20 +1869,14 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ? FromRoutedEventsEntryMethodName
             : FromRoutedEventHandlersEntryMethodName;
         var wrapperName = GetAvaloniaRoutedWrapperName(type, entryKind);
-        var methodSource = $$"""
-            public static {{wrapperName}} {{methodName}}(
-                this {{QualifiedType(type)}} source,
-                global::Avalonia.Interactivity.RoutingStrategies routes,
-                bool handledEventsToo = false)
-                => new {{wrapperName}}(source, routes, handledEventsToo);
-            """;
+        var method = ObservableEventsSyntaxFactory.CreateAvaloniaRoutedExtensionMethod(
+            methodName,
+            SyntaxFactory.ParseTypeName(wrapperName),
+            SyntaxFactory.ParseTypeName(QualifiedType(type)),
+            SyntaxFactory.ParseTypeName(wrapperName));
 
-        return SyntaxFactory.ClassDeclaration("ObservableEventsBootstrapExtensions")
-            .AddModifiers(
-                SyntaxFactory.Token(SyntaxKind.InternalKeyword),
-                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
-                SyntaxFactory.Token(SyntaxKind.PartialKeyword))
-            .AddMembers(SyntaxFactory.ParseMemberDeclaration(methodSource)!);
+        return ObservableEventsSyntaxFactory.BootstrapExtensionsClassDeclaration()
+            .AddMembers(method);
     }
 
     private static ClassDeclarationSyntax CreateWrapperClass(
@@ -1858,7 +1915,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                     .WithType(senderType))
             .WithBody(
                 SyntaxFactory.Block(
-                    SyntaxFactory.ParseStatement("_sender = sender;")));
+                    ObservableEventsSyntaxFactory.SenderAssignmentStatement()));
 
         var members = new List<MemberDeclarationSyntax> { field, ctor };
         foreach (var evt in GetPublicInstanceEventsFromTypeAndBases(type))
@@ -1871,7 +1928,7 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 }
             }
 
-            var eventTarget = $"_sender.{evt.Name}";
+            var eventTarget = ObservableEventsSyntaxFactory.SenderMemberAccess(evt.Name);
             if (entryKind is ObservableEventsEntryKind.FromEvents or ObservableEventsEntryKind.FromRoutedEvents)
             {
                 if (TryCreateEventObservableProperty(evt, eventTarget, context, out var eventProperty))
@@ -1895,20 +1952,52 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         ObservableEventsEntryKind entryKind)
     {
         var wrapperName = GetAvaloniaRoutedWrapperName(type, entryKind);
-        var members = new List<string>
-        {
-            $"private readonly {QualifiedType(type)} _sender;",
-            "private readonly global::Avalonia.Interactivity.RoutingStrategies _routes;",
-            "private readonly bool _handledEventsToo;",
-            $$"""
-            internal {{wrapperName}}({{QualifiedType(type)}} sender, global::Avalonia.Interactivity.RoutingStrategies routes, bool handledEventsToo)
-            {
-                _sender = sender;
-                _routes = routes;
-                _handledEventsToo = handledEventsToo;
-            }
-            """,
-        };
+        var senderType = SyntaxFactory.ParseTypeName(QualifiedType(type));
+        var routesType = SyntaxFactory.ParseTypeName("global::Avalonia.Interactivity.RoutingStrategies");
+
+        var fieldSender = SyntaxFactory.FieldDeclaration(
+                SyntaxFactory.VariableDeclaration(senderType)
+                    .AddVariables(SyntaxFactory.VariableDeclarator("_sender")))
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PrivateKeyword),
+                SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword));
+
+        var fieldRoutes = SyntaxFactory.FieldDeclaration(
+                SyntaxFactory.VariableDeclaration(routesType)
+                    .AddVariables(SyntaxFactory.VariableDeclarator("_routes")))
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PrivateKeyword),
+                SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword));
+
+        var fieldHandled = SyntaxFactory.FieldDeclaration(
+                SyntaxFactory.VariableDeclaration(SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.BoolKeyword)))
+                    .AddVariables(SyntaxFactory.VariableDeclarator("_handledEventsToo")))
+            .AddModifiers(
+                SyntaxFactory.Token(SyntaxKind.PrivateKeyword),
+                SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword));
+
+        var ctor = SyntaxFactory.ConstructorDeclaration(wrapperName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("sender")).WithType(senderType),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("routes")).WithType(routesType),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("handledEventsToo"))
+                    .WithType(SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.BoolKeyword))))
+            .WithBody(
+                SyntaxFactory.Block(
+                    ObservableEventsSyntaxFactory.SenderAssignmentStatement(),
+                    SyntaxFactory.ExpressionStatement(
+                        SyntaxFactory.AssignmentExpression(
+                            SyntaxKind.SimpleAssignmentExpression,
+                            SyntaxFactory.IdentifierName("_routes"),
+                            SyntaxFactory.IdentifierName("routes"))),
+                    SyntaxFactory.ExpressionStatement(
+                        SyntaxFactory.AssignmentExpression(
+                            SyntaxKind.SimpleAssignmentExpression,
+                            SyntaxFactory.IdentifierName("_handledEventsToo"),
+                            SyntaxFactory.IdentifierName("handledEventsToo")))));
+
+        var members = new List<MemberDeclarationSyntax> { fieldSender, fieldRoutes, fieldHandled, ctor };
 
         foreach (var evt in GetPublicInstanceEventsFromTypeAndBases(type))
         {
@@ -1917,33 +2006,19 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var propertySource = entryKind == ObservableEventsEntryKind.FromRoutedEvents
-                ? CreateAvaloniaRoutedEventObservablePropertySource(evt, routedEventField, eventArgsType, context)
-                : CreateAvaloniaRoutedEventHandlerObservablePropertySource(evt, routedEventField, eventArgsType, context);
-            if (!string.IsNullOrWhiteSpace(propertySource))
-            {
-                members.Add(propertySource);
-            }
+            members.Add(
+                ObservableEventsSyntaxFactory.CreateAvaloniaRoutedEventProperty(
+                    evt,
+                    routedEventField,
+                    eventArgsType,
+                    entryKind == ObservableEventsEntryKind.FromRoutedEventHandlers,
+                    ObservableEventsSyntaxFactory.CreateEventInheritDocTrivia(
+                        $"{QualifiedType(evt.ContainingType)}.{evt.Name}")));
         }
 
-        var classSource = $$"""
-            internal class {{wrapperName}}
-            {
-            {{IndentMembers(members)}}
-            }
-            """;
-
-        return (ClassDeclarationSyntax)SyntaxFactory.ParseMemberDeclaration(classSource)!;
-    }
-
-    private static string IndentMembers(IEnumerable<string> members)
-    {
-        return string.Join(
-            "\n\n",
-            members.Select(static member => string.Join(
-                "\n",
-                member.Trim().Split(new[] { "\r\n", "\n" }, System.StringSplitOptions.None)
-                    .Select(static line => "    " + line))));
+        return SyntaxFactory.ClassDeclaration(wrapperName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.InternalKeyword))
+            .AddMembers(members.ToArray());
     }
 
     private static bool IsRoutedClrEvent(IEventSymbol evt, Compilation compilation, bool includeWpf)
@@ -2026,40 +2101,6 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static string CreateAvaloniaRoutedEventObservablePropertySource(
-        IEventSymbol evt,
-        IFieldSymbol routedEventField,
-        INamedTypeSymbol eventArgsType,
-        SourceProductionContext context)
-    {
-        var eventArgs = QualifiedType(eventArgsType);
-        var eventField = $"{QualifiedType(routedEventField.ContainingType)}.{routedEventField.Name}";
-        var eventCref = $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
-        return $$"""
-            /// <summary>
-            /// <inheritdoc cref="{{eventCref}}" />
-            /// </summary>
-            public global::R3.Observable<{{eventArgs}}> {{evt.Name}} => global::R3.Observable.FromEvent<global::System.EventHandler<{{eventArgs}}>, {{eventArgs}}>(h => (sender, e) => h(e), h => _sender.AddHandler({{eventField}}, h, _routes, _handledEventsToo), h => _sender.RemoveHandler({{eventField}}, h), default);
-            """;
-    }
-
-    private static string CreateAvaloniaRoutedEventHandlerObservablePropertySource(
-        IEventSymbol evt,
-        IFieldSymbol routedEventField,
-        INamedTypeSymbol eventArgsType,
-        SourceProductionContext context)
-    {
-        var eventArgs = QualifiedType(eventArgsType);
-        var eventField = $"{QualifiedType(routedEventField.ContainingType)}.{routedEventField.Name}";
-        var eventCref = $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
-        return $$"""
-            /// <summary>
-            /// <inheritdoc cref="{{eventCref}}" />
-            /// </summary>
-            public global::R3.Observable<(object? sender, {{eventArgs}} e)> {{evt.Name}} => global::R3.Observable.FromEventHandler<{{eventArgs}}>(h => _sender.AddHandler({{eventField}}, h, _routes, _handledEventsToo), h => _sender.RemoveHandler({{eventField}}, h), default);
-            """;
-    }
-
     private static bool IsWpfRoutedEventType(ITypeSymbol type, Compilation compilation)
     {
         var routedEventType = compilation.GetTypeByMetadataName("System.Windows.RoutedEvent");
@@ -2127,8 +2168,10 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         foreach (var evt in type.GetMembers().OfType<IEventSymbol>()
                      .Where(static e => e is { IsStatic: true, DeclaredAccessibility: Accessibility.Public }))
         {
-            var eventTarget =
-                $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
+            var eventTarget = SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.ParseName(QualifiedType(evt.ContainingType)),
+                SyntaxFactory.IdentifierName(evt.Name));
             if (TryCreateEventObservableProperty(evt, eventTarget, context, out var eventProperty))
             {
                 members.Add(eventProperty);
@@ -2142,9 +2185,10 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
 
     private static bool TryCreateEventObservableProperty(
         IEventSymbol evt,
-        string eventAccessorExpression,
+        ExpressionSyntax eventAccessorExpression,
         SourceProductionContext context,
-        out PropertyDeclarationSyntax property)
+        out PropertyDeclarationSyntax property,
+        bool includeXmlDocumentation = true)
     {
         property = null!;
         if (evt.Type is not INamedTypeSymbol delegateType || delegateType.DelegateInvokeMethod is not IMethodSymbol invoke)
@@ -2159,34 +2203,31 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             return false;
         }
 
-        var returnTypeStr = GetObservableReturnType(invoke.Parameters);
-        var expressionText = BuildFromEventObservableExpression(delegateType, invoke.Parameters, eventAccessorExpression);
-        if (expressionText is null)
+        var returnType = ObservableEventsSyntaxFactory.GetObservableReturnTypeSyntax(invoke.Parameters);
+        var bodyExpression = ObservableEventsSyntaxFactory.BuildFromEventObservableExpression(
+            delegateType,
+            invoke.Parameters,
+            eventAccessorExpression);
+        property = SyntaxFactory.PropertyDeclaration(returnType, evt.Name)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
+            .WithExpressionBody(SyntaxFactory.ArrowExpressionClause(bodyExpression))
+            .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+        if (includeXmlDocumentation)
         {
-            ReportInvalidDelegate(evt, context);
-            return false;
+            property = property.WithLeadingTrivia(ObservableEventsSyntaxFactory.CreateEventInheritDocTrivia(
+                $"{QualifiedType(evt.ContainingType)}.{evt.Name}"));
         }
 
-        var eventCref = $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
-        var docXml = SyntaxFactory.ParseLeadingTrivia(
-            $"/// <summary>\n" +
-            $"/// <inheritdoc cref=\"{eventCref}\" />\n" +
-            $"/// </summary>\n");
-        var parsedExpression = SyntaxFactory.ParseExpression(expressionText);
-        property = SyntaxFactory.PropertyDeclaration(SyntaxFactory.ParseTypeName(returnTypeStr), evt.Name)
-            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
-            .WithLeadingTrivia(docXml)
-            .WithExpressionBody(SyntaxFactory.ArrowExpressionClause(parsedExpression))
-            .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
         return true;
     }
 
     private static bool TryCreateEventHandlerObservableProperty(
         IEventSymbol evt,
-        string eventAccessorExpression,
+        ExpressionSyntax eventAccessorExpression,
         Compilation compilation,
         SourceProductionContext context,
-        out PropertyDeclarationSyntax property)
+        out PropertyDeclarationSyntax property,
+        bool includeXmlDocumentation = true)
     {
         property = null!;
         if (evt.Type is not INamedTypeSymbol delegateType || delegateType.DelegateInvokeMethod is not IMethodSymbol invoke)
@@ -2201,23 +2242,29 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             return false;
         }
 
-        string expressionText;
-        string returnTypeStr;
+        TypeSyntax returnType;
+        ExpressionSyntax bodyExpression;
 
         if (IsClassicSystemEventHandler(delegateType, compilation, out var genericEventArgs))
         {
-            expressionText = genericEventArgs is null
-                ? $"global::R3.Observable.FromEventHandler(h => {eventAccessorExpression} += h, h => {eventAccessorExpression} -= h, default)"
-                : $"global::R3.Observable.FromEventHandler<{QualifiedType(genericEventArgs)}>(h => {eventAccessorExpression} += h, h => {eventAccessorExpression} -= h, default)";
-
-            returnTypeStr = genericEventArgs is null
-                ? "global::R3.Observable<(object? sender, global::System.EventArgs e)>"
-                : $"global::R3.Observable<(object? sender, {QualifiedType(genericEventArgs)} e)>";
+            var add = ObservableEventsSyntaxFactory.EventSubscriptionAdd(eventAccessorExpression);
+            var remove = ObservableEventsSyntaxFactory.EventSubscriptionRemove(eventAccessorExpression);
+            var eventArgsType = genericEventArgs is null
+                ? SyntaxFactory.ParseTypeName("global::System.EventArgs")
+                : SyntaxFactory.ParseTypeName(QualifiedType(genericEventArgs));
+            bodyExpression = ObservableEventsSyntaxFactory.ObservableFromEventHandlerInvocation(
+                genericEventArgs is null ? null : eventArgsType,
+                add,
+                remove);
+            returnType = ObservableEventsSyntaxFactory.R3ObservableSenderArgsTupleType(eventArgsType);
         }
         else if (IsLegacySenderReceiverDelegate(delegateType, invoke, compilation))
         {
-            expressionText = BuildSenderArgsTupleFromEventExpression(delegateType, invoke.Parameters, eventAccessorExpression);
-            returnTypeStr = GetFromEventHandlersSenderReceiverReturnType(invoke.Parameters);
+            bodyExpression = ObservableEventsSyntaxFactory.BuildLegacySenderReceiverFromEventExpression(
+                delegateType,
+                invoke.Parameters,
+                eventAccessorExpression);
+            returnType = ObservableEventsSyntaxFactory.GetFromEventHandlersSenderReceiverReturnTypeSyntax(invoke.Parameters);
         }
         else
         {
@@ -2225,17 +2272,17 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             return false;
         }
 
-        var eventCref = $"{QualifiedType(evt.ContainingType)}.{evt.Name}";
-        var docXml = SyntaxFactory.ParseLeadingTrivia(
-            $"/// <summary>\n" +
-            $"/// <inheritdoc cref=\"{eventCref}\" />\n" +
-            $"/// </summary>\n");
-        property = SyntaxFactory.PropertyDeclaration(SyntaxFactory.ParseTypeName(returnTypeStr), evt.Name)
+        property = SyntaxFactory.PropertyDeclaration(returnType, evt.Name)
             .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
-            .WithLeadingTrivia(docXml)
             .WithExpressionBody(
-                SyntaxFactory.ArrowExpressionClause(SyntaxFactory.ParseExpression(expressionText)))
+                SyntaxFactory.ArrowExpressionClause(bodyExpression))
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+        if (includeXmlDocumentation)
+        {
+            property = property.WithLeadingTrivia(ObservableEventsSyntaxFactory.CreateEventInheritDocTrivia(
+                $"{QualifiedType(evt.ContainingType)}.{evt.Name}"));
+        }
+
         return true;
     }
 
@@ -2274,25 +2321,6 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             compilation.GetSpecialType(SpecialType.System_Object));
     }
 
-    /// <remarks>Second generic argument to FromEvent uses both parameter types so the observable element is <c>(object, TSecond)</c>, surfaced as named <c>(object? sender, TSecond e)</c> on the property.</remarks>
-    private static string BuildSenderArgsTupleFromEventExpression(
-        INamedTypeSymbol delegateType,
-        ImmutableArray<IParameterSymbol> parameters,
-        string eventAccessorExpression)
-    {
-        var eventType = QualifiedType(delegateType);
-        var p0 = QualifiedType(parameters[0].Type);
-        var p1 = QualifiedType(parameters[1].Type);
-        return $"global::R3.Observable.FromEvent<{eventType}, ({p0}, {p1})>(h => (sender, e) => h((sender, e)), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, default)";
-    }
-
-    private static string GetFromEventHandlersSenderReceiverReturnType(ImmutableArray<IParameterSymbol> parameters)
-    {
-        var first = QualifiedType(parameters[0].Type);
-        var second = QualifiedType(parameters[1].Type);
-        return $"global::R3.Observable<({first} sender, {second} e)>";
-    }
-
     /// <returns><see langword="null"/> for non-generic <c>System.EventHandler</c>; otherwise the generic event-args type.</returns>
     private static bool IsClassicSystemEventHandler(INamedTypeSymbol delegateType, Compilation compilation, out INamedTypeSymbol? genericEventArgs)
     {
@@ -2320,61 +2348,6 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static string? BuildFromEventObservableExpression(
-        INamedTypeSymbol delegateType,
-        ImmutableArray<IParameterSymbol> parameters,
-        string eventAccessorExpression)
-    {
-        var eventType = QualifiedType(delegateType);
-        if (parameters.Length == 0)
-        {
-            return
-                $"global::R3.Observable.FromEvent<{eventType}, global::R3.Unit>(h => () => h(global::R3.Unit.Default), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, default)";
-        }
-
-        if (parameters.Length == 1)
-        {
-            var t1 = QualifiedType(parameters[0].Type);
-            return
-                $"global::R3.Observable.FromEvent<{eventType}, {t1}>(h => arg1 => h(arg1), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, default)";
-        }
-
-        if (parameters.Length == 2 && parameters[0].Type.SpecialType == SpecialType.System_Object)
-        {
-            var eventArgsType = QualifiedType(parameters[1].Type);
-            return
-                $"global::R3.Observable.FromEvent<{eventType}, {eventArgsType}>(h => (sender, e) => h(e), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, default)";
-        }
-
-        var tupleType = $"({string.Join(", ", parameters.Select(static p => QualifiedType(p.Type)))})";
-        var tupleArgs = string.Join(", ", parameters.Select((_, i) => $"arg{i + 1}"));
-        return
-            $"global::R3.Observable.FromEvent<{eventType}, {tupleType}>(h => ({tupleArgs}) => h(({tupleArgs})), e => {eventAccessorExpression} += e, e => {eventAccessorExpression} -= e, default)";
-    }
-
-    private static string GetObservableReturnType(ImmutableArray<IParameterSymbol> parameters)
-    {
-        if (parameters.Length == 0)
-        {
-            return "global::R3.Observable<global::R3.Unit>";
-        }
-
-        if (parameters.Length == 1)
-        {
-            var t1 = QualifiedType(parameters[0].Type);
-            return $"global::R3.Observable<{t1}>";
-        }
-
-        if (parameters.Length == 2 && parameters[0].Type.SpecialType == SpecialType.System_Object)
-        {
-            var eventArgsType = QualifiedType(parameters[1].Type);
-            return $"global::R3.Observable<{eventArgsType}>";
-        }
-
-        var tupleType = $"({string.Join(", ", parameters.Select(static p => QualifiedType(p.Type)))})";
-        return $"global::R3.Observable<{tupleType}>";
-    }
-
     private static string GetStaticObservableEventsNestedId(INamedTypeSymbol type) => $"OBS_{type.GetSafeHintName()}";
 
     private static string GetStaticWrapperName(INamedTypeSymbol type) =>
@@ -2390,9 +2363,6 @@ public sealed class ObservableEventsGenerator : IIncrementalGenerator
             ObservableEventsEntryKind.FromEventHandlers => $"{GetGenericConstraintTargetHintName(target)}FromEventHandlerObservable",
             _ => throw new System.ArgumentOutOfRangeException(nameof(entryKind)),
         };
-
-    private static string GetGenericConstraintClause(GenericConstraintTarget target) =>
-        $"where TSource : {string.Join(", ", target.ConstraintTypes.Select(static t => QualifiedConstraintType(t)))}";
 
     private static TypeParameterConstraintClauseSyntax CreateGenericConstraintClauseSyntax(GenericConstraintTarget target) =>
         SyntaxFactory.TypeParameterConstraintClause("TSource")

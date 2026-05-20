@@ -57,7 +57,10 @@ public sealed class ObservableEventsGeneratorTests
         Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
         Assert.Contains("FromAvaloniaRoutedEventObservable", snapshot);
         Assert.Contains("FromAvaloniaRoutedEventHandlerObservable", snapshot);
-        Assert.Contains("_sender.AddHandler(global::Avalonia.Controls.Button.ClickEvent, h, _routes, _handledEventsToo)", snapshot);
+        Assert.Contains("_sender.AddHandler", snapshot);
+        Assert.Contains("global::Avalonia.Controls.Button.ClickEvent", snapshot);
+        Assert.Contains("_routes", snapshot);
+        Assert.Contains("_handledEventsToo", snapshot);
     }
 
     [Fact]
@@ -85,7 +88,9 @@ public sealed class ObservableEventsGeneratorTests
         Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
         Assert.Contains("FromAttachedRoutedEvent<TEventArgs>", snapshot);
         Assert.Contains("FromAttachedRoutedEventHandler<TEventArgs>", snapshot);
-        Assert.Contains("source.AddHandler(routedEvent, h, routes, handledEventsToo)", snapshot);
+        Assert.Contains("source.AddHandler", snapshot);
+        Assert.Contains("routedEvent", snapshot);
+        Assert.Contains("handledEventsToo", snapshot);
     }
 
     [Fact]

@@ -22,9 +22,6 @@ internal sealed class ClickSourceEventsImpl : IClickSourceEvents
         _sender = sender;
     }
 
-    /// <summary>
-    /// <inheritdoc cref = "global::Demo.ClickSource.Click"/>
-    /// </summary>
     public global::R3.Observable<global::R3.Unit> Click => global::R3.Observable.FromEvent<global::System.Action?, global::R3.Unit>(h => () => h(global::R3.Unit.Default), e => _sender.Click += e, e => _sender.Click -= e, default);
 }
 
@@ -37,6 +34,9 @@ using R3;
 namespace R3.SourceGenerators;
 internal interface IClickSourceEvents
 {
+    /// <summary>
+    /// <inheritdoc cref = "global::Demo.ClickSource.Click"/>
+    /// </summary>
     global::R3.Observable<global::R3.Unit> Click { get; }
 }
 
@@ -46,9 +46,9 @@ internal interface IClickSourceEvents
 #nullable enable
 namespace R3.SourceGenerators
 {
-internal struct NullEvents
-{
-}
+    internal struct NullEvents
+    {
+    }
 }
 
 --- R3.SourceGenerators.ObservableEventsBootstrapExtensions.g.cs ---
@@ -57,46 +57,46 @@ internal struct NullEvents
 #nullable enable
 namespace R3.SourceGenerators
 {
-internal static partial class ObservableEventsBootstrapExtensions
-{
-    public static NullEvents FromEvents(this object? source)
+    internal static partial class ObservableEventsBootstrapExtensions
     {
-        return default;
-    }
+        public static R3.SourceGenerators.NullEvents FromEvents(this object? source)
+        {
+            return default(R3.SourceGenerators.NullEvents);
+        }
 
-    public static NullEvents FromEventHandlers(this object? source)
-    {
-        return default;
-    }
+        public static R3.SourceGenerators.NullEvents FromEventHandlers(this object? source)
+        {
+            return default(R3.SourceGenerators.NullEvents);
+        }
 
-    public static NullEvents FromRoutedEvents(this object? source)
-    {
-        return default;
-    }
+        public static R3.SourceGenerators.NullEvents FromRoutedEvents(this object? source)
+        {
+            return default(R3.SourceGenerators.NullEvents);
+        }
 
-    public static NullEvents FromRoutedEvents(this object? source, object? routes, bool handledEventsToo = false)
-    {
-        return default;
-    }
+        public static R3.SourceGenerators.NullEvents FromRoutedEvents(this object? source, global::System.Object routes, bool handledEventsToo = false)
+        {
+            return default(R3.SourceGenerators.NullEvents);
+        }
 
-    public static NullEvents FromRoutedEventHandlers(this object? source)
-    {
-        return default;
-    }
+        public static R3.SourceGenerators.NullEvents FromRoutedEventHandlers(this object? source)
+        {
+            return default(R3.SourceGenerators.NullEvents);
+        }
 
-    public static NullEvents FromRoutedEventHandlers(this object? source, object? routes, bool handledEventsToo = false)
-    {
-        return default;
-    }
+        public static R3.SourceGenerators.NullEvents FromRoutedEventHandlers(this object? source, global::System.Object routes, bool handledEventsToo = false)
+        {
+            return default(R3.SourceGenerators.NullEvents);
+        }
 
-    public static NullEvents FromAttachedRoutedEvent(this object? source, object? routedEvent, object? routes = null, bool handledEventsToo = false)
-    {
-        return default;
-    }
+        public static R3.SourceGenerators.NullEvents FromAttachedRoutedEvent(this object? source, global::System.Object routedEvent, global::System.Object routes = null, bool handledEventsToo = false)
+        {
+            return default(R3.SourceGenerators.NullEvents);
+        }
 
-    public static NullEvents FromAttachedRoutedEventHandler(this object? source, object? routedEvent, object? routes = null, bool handledEventsToo = false)
-    {
-        return default;
+        public static R3.SourceGenerators.NullEvents FromAttachedRoutedEventHandler(this object? source, global::System.Object routedEvent, global::System.Object routes = null, bool handledEventsToo = false)
+        {
+            return default(R3.SourceGenerators.NullEvents);
+        }
     }
-}
 }

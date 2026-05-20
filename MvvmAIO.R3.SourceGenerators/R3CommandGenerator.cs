@@ -1,5 +1,5 @@
-using System.Linq;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -23,7 +23,9 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
         {
             ctx.AddSource(
                 "MvvmAIO.R3.R3CommandAttribute.g.cs",
-                SourceText.From(GeneratedSourceHeader.Apply(GeneratorSources.R3CommandAttribute), Encoding.UTF8));
+                SourceText.From(
+                    GeneratedSourceHeader.ToSource(GeneratorBootstrapSyntaxFactory.CreateR3CommandAttributeCompilationUnit()),
+                    Encoding.UTF8));
         });
 
         var targets = context.SyntaxProvider.ForAttributeWithMetadataName(
@@ -59,7 +61,7 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
         });
     }
 
-    private static bool TryBuildCommandInfo(IMethodSymbol method, out CommandInfo info)
+    private static bool TryBuildCommandInfo(IMethodSymbol method, out R3CommandInfo info)
     {
         info = default;
         if (method.MethodKind != MethodKind.Ordinary || method.IsStatic)
@@ -103,66 +105,30 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
 
         var canExecuteMemberName = GetCanExecuteMemberName(method);
 
-        info = new CommandInfo(commandName, parameterType, outputType, isTask || isValueTask, taskOfT || valueTaskOfT, canExecuteMemberName);
+        info = new R3CommandInfo(commandName, parameterType, outputType, isTask || isValueTask, taskOfT || valueTaskOfT, canExecuteMemberName);
         return true;
     }
 
-    private static CompilationUnitSyntax BuildCompilationUnit(INamedTypeSymbol type, IMethodSymbol method, CommandInfo info)
+    private static CompilationUnitSyntax BuildCompilationUnit(INamedTypeSymbol type, IMethodSymbol method, R3CommandInfo info)
     {
         var methodName = method.Name;
         var fieldName = "_" + char.ToLowerInvariant(info.PropertyName[0]) + info.PropertyName.Substring(1);
-
-        var canExecuteExpr = info.HasCanExecute ? $", {info.CanExecuteMemberName}" : "";
-
-        string commandType;
-        string constructorExpr;
-        if (info.IsAsyncWithoutResult)
-        {
-            commandType = info.ParameterType is null ? "global::R3.ReactiveCommand" : $"global::R3.ReactiveCommand<{info.ParameterType}>";
-            if (info.ParameterType is null)
-            {
-                constructorExpr = $"new global::R3.ReactiveCommand((_, __) => new global::System.Threading.Tasks.ValueTask({methodName}()){canExecuteExpr})";
-            }
-            else
-            {
-                constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}>((x, __) => new global::System.Threading.Tasks.ValueTask({methodName}(x)){canExecuteExpr})";
-            }
-        }
-        else if (info.IsAsyncWithResult)
-        {
-            commandType = $"global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>";
-            constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>(async (x, __) => await {methodName}(x){canExecuteExpr})";
-        }
-        else if (info.OutputType is not null)
-        {
-            commandType = $"global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>";
-            constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}, {info.OutputType}>(x => {methodName}(x){canExecuteExpr})";
-        }
-        else
-        {
-            commandType = info.ParameterType is null ? "global::R3.ReactiveCommand" : $"global::R3.ReactiveCommand<{info.ParameterType}>";
-            if (info.ParameterType is null)
-            {
-                constructorExpr = $"new global::R3.ReactiveCommand(_ => {methodName}(){canExecuteExpr})";
-            }
-            else
-            {
-                constructorExpr = $"new global::R3.ReactiveCommand<{info.ParameterType}>(x => {methodName}(x){canExecuteExpr})";
-            }
-        }
+        var parameterType = info.ParameterType is null ? null : ParseTypeName(info.ParameterType);
+        var outputType = info.OutputType is null ? null : ParseTypeName(info.OutputType);
+        var commandType = R3CommandSyntaxFactory.ReactiveCommandType(parameterType, outputType);
 
         var fieldDeclaration = FieldDeclaration(
-                VariableDeclaration(ParseTypeName(commandType + "?"))
-                    .AddVariables(
-                        VariableDeclarator(Identifier(fieldName))))
+                VariableDeclaration(R3CommandSyntaxFactory.NullableReactiveCommandType(parameterType, outputType))
+                    .AddVariables(VariableDeclarator(Identifier(fieldName))))
             .AddModifiers(Token(SyntaxKind.PrivateKeyword));
 
-        var propertyDeclaration = PropertyDeclaration(ParseTypeName(commandType), Identifier(info.PropertyName))
+        var propertyDeclaration = PropertyDeclaration(commandType, Identifier(info.PropertyName))
             .AddModifiers(Token(SyntaxKind.PublicKeyword))
             .AddAccessorListAccessors(
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                     .WithExpressionBody(
-                        ArrowExpressionClause(ParseExpression($"{fieldName} ??= {constructorExpr}")))
+                        ArrowExpressionClause(
+                            R3CommandSyntaxFactory.CreatePropertyInitializerExpression(fieldName, info, methodName)))
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
         var hierarchy = HierarchyInfo.From(type);
@@ -211,30 +177,4 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
         return null;
     }
 
-    private readonly struct CommandInfo
-    {
-        public CommandInfo(string propertyName, string? parameterType, string? outputType, bool isAsyncWithoutResult, bool isAsyncWithResult, string? canExecuteMemberName)
-        {
-            PropertyName = propertyName;
-            ParameterType = parameterType;
-            OutputType = outputType;
-            IsAsyncWithoutResult = isAsyncWithoutResult;
-            IsAsyncWithResult = isAsyncWithResult;
-            CanExecuteMemberName = canExecuteMemberName;
-        }
-
-        public string PropertyName { get; }
-
-        public string? ParameterType { get; }
-
-        public string? OutputType { get; }
-
-        public bool IsAsyncWithoutResult { get; }
-
-        public bool IsAsyncWithResult { get; }
-
-        public string? CanExecuteMemberName { get; }
-
-        public bool HasCanExecute => !string.IsNullOrWhiteSpace(CanExecuteMemberName);
-    }
 }

@@ -18,7 +18,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)Models\Result.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Models\TypeInfo.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)GeneratedSourceHeader.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)GeneratorSources.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsSyntaxFactory.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)GeneratorBootstrapSyntaxFactory.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)R3CommandSyntaxFactory.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)R3CommandGenerator.cs" />
   </ItemGroup>
