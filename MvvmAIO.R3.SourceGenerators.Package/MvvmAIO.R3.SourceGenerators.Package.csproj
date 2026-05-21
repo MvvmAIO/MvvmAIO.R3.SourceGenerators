@@ -10,7 +10,7 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 
     <PackageId>MvvmAIO.R3.SourceGenerators</PackageId>
-    <Version>0.5.2</Version>
+    <Version>0.5.3</Version>
     <Authors>MvvmAIO</Authors>
     <Description>Roslyn source generators for R3-based MVVM scenarios.</Description>
     <PackageTags>r3;mvvm;source-generator;roslyn</PackageTags>

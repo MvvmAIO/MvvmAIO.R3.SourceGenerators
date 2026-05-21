@@ -102,7 +102,7 @@ internal static class R3CommandSyntaxFactory
                 ParameterList(
                     SeparatedList<ParameterSyntax>(
                     [
-                        Parameter(Identifier("_")).WithType(PredefinedType(Token(SyntaxKind.ObjectKeyword))),
+                        Parameter(Identifier("_")),
                         Parameter(Identifier("__")),
                     ])),
                 valueTaskCreation);
