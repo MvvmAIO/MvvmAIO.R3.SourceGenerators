@@ -33,8 +33,11 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
             static (node, _) => node is MethodDeclarationSyntax { Parent: TypeDeclarationSyntax },
             static (syntaxContext, _) => (IMethodSymbol)syntaxContext.TargetSymbol);
 
-        context.RegisterSourceOutput(targets, (spc, method) =>
+        var targetsWithCompilation = targets.Combine(context.CompilationProvider);
+        context.RegisterSourceOutput(targetsWithCompilation, (spc, pair) =>
         {
+            var method = pair.Left;
+            var compilation = pair.Right;
             var containingType = method.ContainingType;
             if (!containingType.IsPartial())
             {
@@ -51,6 +54,19 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
                     DiagnosticDescriptors.InvalidCommandMethodSignature,
                     method.Locations.FirstOrDefault(),
                     method.Name));
+                return;
+            }
+
+            if (TryGetDuplicateCommandPropertyDiagnostic(method, info, out var duplicateDiagnostic))
+            {
+                spc.ReportDiagnostic(duplicateDiagnostic);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(info.CanExecuteMemberName)
+                && !TryValidateCanExecuteMember(method, containingType, info.CanExecuteMemberName!, compilation, out var canExecuteDiagnostic))
+            {
+                spc.ReportDiagnostic(canExecuteDiagnostic);
                 return;
             }
 
@@ -108,6 +124,123 @@ public sealed class R3CommandGenerator : IIncrementalGenerator
         info = new R3CommandInfo(commandName, parameterType, outputType, isTask || isValueTask, taskOfT || valueTaskOfT, canExecuteMemberName);
         return true;
     }
+
+    private static bool TryGetDuplicateCommandPropertyDiagnostic(
+        IMethodSymbol method,
+        R3CommandInfo info,
+        out Diagnostic diagnostic)
+    {
+        diagnostic = null!;
+        foreach (var other in method.ContainingType.GetMembers().OfType<IMethodSymbol>())
+        {
+            if (SymbolEqualityComparer.Default.Equals(other, method))
+            {
+                continue;
+            }
+
+            if (!HasR3CommandAttribute(other) || !TryBuildCommandInfo(other, out var otherInfo))
+            {
+                continue;
+            }
+
+            if (!string.Equals(otherInfo.PropertyName, info.PropertyName, System.StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            diagnostic = Diagnostic.Create(
+                DiagnosticDescriptors.DuplicateCommandPropertyName,
+                method.Locations.FirstOrDefault() ?? other.Locations.FirstOrDefault(),
+                info.PropertyName,
+                other.Name,
+                method.Name,
+                method.ContainingType.Name);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryValidateCanExecuteMember(
+        IMethodSymbol method,
+        INamedTypeSymbol containingType,
+        string memberName,
+        Compilation compilation,
+        out Diagnostic diagnostic)
+    {
+        diagnostic = null!;
+        var member = FindCanExecuteMember(containingType, memberName);
+        var location = method.Locations.FirstOrDefault() ?? containingType.Locations.FirstOrDefault();
+
+        if (member is null)
+        {
+            diagnostic = Diagnostic.Create(
+                DiagnosticDescriptors.CanExecuteMemberNotFound,
+                location,
+                memberName,
+                containingType.Name,
+                method.Name);
+            return false;
+        }
+
+        var memberType = member switch
+        {
+            IFieldSymbol field => field.Type,
+            IPropertySymbol property => property.Type,
+            _ => null,
+        };
+
+        if (memberType is null || !IsValidCanExecuteType(memberType, compilation))
+        {
+            diagnostic = Diagnostic.Create(
+                DiagnosticDescriptors.CanExecuteMemberTypeMismatch,
+                member.Locations.FirstOrDefault() ?? location,
+                memberName,
+                containingType.Name,
+                memberType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? "unknown");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static ISymbol? FindCanExecuteMember(INamedTypeSymbol containingType, string memberName)
+    {
+        foreach (var member in containingType.GetMembers(memberName))
+        {
+            if (member is IFieldSymbol { IsStatic: false } or IPropertySymbol { IsStatic: false })
+            {
+                return member;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsValidCanExecuteType(ITypeSymbol type, Compilation compilation)
+    {
+        if (type is not INamedTypeSymbol named || !named.IsGenericType || named.TypeArguments.Length != 1)
+        {
+            return false;
+        }
+
+        var boolType = compilation.GetSpecialType(SpecialType.System_Boolean);
+        if (!SymbolEqualityComparer.Default.Equals(
+                named.TypeArguments[0].WithNullableAnnotation(NullableAnnotation.None),
+                boolType))
+        {
+            return false;
+        }
+
+        var r3Observable = compilation.GetTypeByMetadataName("R3.Observable`1");
+        var ioObservable = compilation.GetTypeByMetadataName("System.IObservable`1");
+        return (r3Observable is not null && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, r3Observable))
+            || (ioObservable is not null && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, ioObservable));
+    }
+
+    private static bool HasR3CommandAttribute(IMethodSymbol method) =>
+        method.GetAttributes().Any(static attribute =>
+            attribute.AttributeClass?.ToDisplayString() == AttributeMetadataName);
 
     private static CompilationUnitSyntax BuildCompilationUnit(INamedTypeSymbol type, IMethodSymbol method, R3CommandInfo info)
     {

@@ -213,6 +213,22 @@ internal static class ObservableEventsSyntaxFactory
         return method;
     }
 
+    public static SeparatedSyntaxList<ArgumentSyntax> AvaloniaRoutedImplConstructorArguments()
+    {
+        var routingStrategies = ParseName("global::Avalonia.Interactivity.RoutingStrategies");
+        var routesDefault = BinaryExpression(
+            SyntaxKind.BitwiseOrExpression,
+            MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, routingStrategies, IdentifierName("Direct")),
+            MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, routingStrategies, IdentifierName("Bubble")));
+
+        return SeparatedList(
+        [
+            Argument(IdentifierName("source")),
+            Argument(routesDefault),
+            Argument(LiteralExpression(SyntaxKind.FalseLiteralExpression, Token(SyntaxKind.FalseKeyword))),
+        ]);
+    }
+
     public static MethodDeclarationSyntax CreateAvaloniaRoutedExtensionMethod(
         string methodName,
         TypeSyntax returnType,

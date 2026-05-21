@@ -1,9 +1,9 @@
 # 设计文档：基于接口继承的事件 Observable 生成
 
-> **版本**: v0.5.0-dev  
-> **日期**: 2026-05-19  
-> **状态**: 已实现，待发布  
-> **影响范围**: `FromEvents()` / `FromEventHandlers()` 生成管线（Routed events 不受影响）
+> **版本**: v0.6.0  
+> **日期**: 2026-05-21（文档更新）  
+> **状态**: 已实现；随 NuGet **0.6.0** 发布（生成器内部自 **0.5.2** 起已切换为 SyntaxFactory 管线，用户可见 API 保持兼容）  
+> **影响范围**: `FromEvents()` / `FromEventHandlers()` / `FromRoutedEvents()` / `FromRoutedEventHandlers()` 生成管线
 
 ---
 
@@ -118,6 +118,7 @@ ExpandForInterfaces(type T) → 可达接口列表:
 | 源类型种类 | 示例 | FromEvents 接口名 | FromEventHandlers 接口名 |
 |---|---|---|---|
 | 类 | `Button` | `IButtonEvents` | `IButtonEventHandlers` |
+| 类（路由） | `Button` | `IButtonRoutedEvents` | `IButtonRoutedEventHandlers` |
 | 接口 | `INotifyPropertyChanged` | `INotifyPropertyChangedEvents` | `INotifyPropertyChangedEventHandlers` |
 
 **规则：**
@@ -135,7 +136,7 @@ Namespace2.Button → INamespace2_ButtonEvents
 
 ### 4.3 实现类命名
 
-`{TypeName}EventsImpl` / `{TypeName}EventHandlersImpl`
+`{TypeName}EventsImpl` / `{TypeName}EventHandlersImpl` / `{TypeName}RoutedEventsImpl` / `{TypeName}RoutedEventHandlersImpl`
 
 ### 4.4 泛型约束组合接口
 
@@ -276,13 +277,12 @@ internal sealed class BaseSource_NotifyEventsImpl<TSource> : IBaseSource_NotifyE
 
 ## 8. 不受影响的代码路径
 
-以下生成路径保持 v0.4.x 行为不变：
+以下生成路径仍使用独立逻辑（非接口层次管线）：
 
-- `FromRoutedEvents()` / `FromRoutedEventHandlers()` — WPF / Avalonia 路由事件
-- `FromAttachedRoutedEvent()` / `FromAttachedRoutedEventHandler()` — Avalonia 附加路由事件
-- Static 事件 (`ObservableEventsStatics`) — 当前已禁用
+- `FromAttachedRoutedEvent()` / `FromAttachedRoutedEventHandler()` — Avalonia 附加路由事件（直接返回 `Observable<T>`）
+- Static 事件 (`ObservableEventsStatics`) — 当前已禁用（`StaticObservableEventsGenerationEnabled = false`）
 
-这些路径仍使用旧的 wrapper class 方式生成，未来可独立迁移到接口方案。
+`FromRoutedEvents()` / `FromRoutedEventHandlers()` 已接入接口方案；Avalonia 类型额外生成带 `routes` / `handledEventsToo` 的重载，无参重载使用 `Direct | Bubble` 与 `handledEventsToo: false` 构造实现类。
 
 ---
 

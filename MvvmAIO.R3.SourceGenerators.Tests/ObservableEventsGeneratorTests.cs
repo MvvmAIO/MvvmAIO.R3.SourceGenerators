@@ -55,8 +55,10 @@ public sealed class ObservableEventsGeneratorTests
         string snapshot = GeneratorTestHarness.ToSnapshot(output);
 
         Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
-        Assert.Contains("FromAvaloniaRoutedEventObservable", snapshot);
-        Assert.Contains("FromAvaloniaRoutedEventHandlerObservable", snapshot);
+        Assert.Contains("IButtonRoutedEvents", snapshot);
+        Assert.Contains("ButtonRoutedEventsImpl", snapshot);
+        Assert.Contains("IButtonRoutedEventHandlers", snapshot);
+        Assert.Contains("ButtonRoutedEventHandlersImpl", snapshot);
         Assert.Contains("_sender.AddHandler", snapshot);
         Assert.Contains("global::Avalonia.Controls.Button.ClickEvent", snapshot);
         Assert.Contains("_routes", snapshot);

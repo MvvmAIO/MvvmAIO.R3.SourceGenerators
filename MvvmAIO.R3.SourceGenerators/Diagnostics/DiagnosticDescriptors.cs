@@ -22,6 +22,30 @@ internal static class DiagnosticDescriptors
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor CanExecuteMemberNotFound = new(
+        id: "R3SG1002",
+        title: "CanExecute member not found",
+        messageFormat: "The CanExecute member '{0}' was not found on type '{1}' for method '{2}'.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor CanExecuteMemberTypeMismatch = new(
+        id: "R3SG1003",
+        title: "CanExecute member type mismatch",
+        messageFormat: "The CanExecute member '{0}' on type '{1}' must be R3.Observable<bool> or System.IObservable<bool>, but has type '{2}'.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor DuplicateCommandPropertyName = new(
+        id: "R3SG1004",
+        title: "Duplicate command property name",
+        messageFormat: "The command property '{0}' would be generated for both '{1}' and '{2}' on type '{3}'. Use distinct CommandName values.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static readonly DiagnosticDescriptor InvalidEventDelegate = new(
         id: "R3SG2001",
         title: "Unsupported event delegate",
