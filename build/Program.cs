@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Nuke.Common;
@@ -26,6 +27,15 @@ sealed class Build : NukeBuild
     AbsolutePath Root => RootDirectory;
     AbsolutePath SolutionFile => Root / "MvvmAIO.R3.SourceGenerators.slnx";
     AbsolutePath PackageProject => Root / "MvvmAIO.R3.SourceGenerators.Package" / "MvvmAIO.R3.SourceGenerators.Package.csproj";
+    AbsolutePath TestProject => Root / "MvvmAIO.R3.SourceGenerators.Tests" / "MvvmAIO.R3.SourceGenerators.Tests.csproj";
+    AbsolutePath PackageOutputDirectory => Root / "artifacts" / "package";
+
+    static readonly (string Project, string CodeAnalysisVersion)[] RoslynMatrix =
+    [
+        ("MvvmAIO.R3.SourceGenerators.Roslyn4031", "4.3.1"),
+        ("MvvmAIO.R3.SourceGenerators.Roslyn4120", "4.12.0"),
+        ("MvvmAIO.R3.SourceGenerators.Roslyn5000", "5.0.0"),
+    ];
 
     public static int Main() => Execute<Build>(x => x.Ci);
 
@@ -61,12 +71,15 @@ sealed class Build : NukeBuild
         .DependsOn(CompilePackage)
         .Executes(() =>
         {
+            PackageOutputDirectory.CreateOrCleanDirectory();
+
             DotNetPack(s =>
             {
                 s = s
                     .SetProject(PackageProject)
                     .SetConfiguration(Configuration)
                     .EnableNoBuild()
+                    .SetProperty("PackageOutputPath", PackageOutputDirectory)
                     .SetProperty("ContinuousIntegrationBuild", "true");
 
                 if (!string.IsNullOrWhiteSpace(Version))
@@ -84,7 +97,7 @@ sealed class Build : NukeBuild
         .Executes(() =>
         {
             DotNetNuGetPush(s => s
-                .SetTargetPath(Root / "MvvmAIO.R3.SourceGenerators.Package" / "bin" / Configuration / "*.nupkg")
+                .SetTargetPath(PackageOutputDirectory / "*.nupkg")
                 .SetApiKey(NuGetApiKey)
                 .SetSource("https://api.nuget.org/v3/index.json")
                 .EnableSkipDuplicate());
@@ -95,11 +108,43 @@ sealed class Build : NukeBuild
         .Executes(() =>
         {
             DotNetTest(s => s
-                .SetProjectFile(SolutionFile)
+                .SetProjectFile(TestProject)
                 .SetConfiguration(Configuration)
-                .EnableNoBuild());
+                .EnableNoRestore()
+                .SetFilter("FullyQualifiedName!~PackageIntegrationTests&FullyQualifiedName!~RoslynMatrixCoreTests"));
+        });
+
+    Target UnitTestRoslynMatrix => _ => _
+        .DependsOn(Compile)
+        .Executes(() =>
+        {
+            foreach ((string project, string codeAnalysisVersion) in RoslynMatrix)
+            {
+                DotNetTest(s => s
+                    .SetProjectFile(TestProject)
+                    .SetConfiguration(Configuration)
+                    .SetFilter("FullyQualifiedName~RoslynMatrixCoreTests")
+                    .SetProperty("MvvmAIOR3SourceGeneratorsRoslynProject", project)
+                    .SetProperty("MvvmAIOR3SourceGeneratorsTestsRoslynVersion", codeAnalysisVersion));
+            }
+        });
+
+    Target ValidatePackage => _ => _
+        .DependsOn(Pack)
+        .DependsOn(Compile)
+        .Executes(() =>
+        {
+            Environment.SetEnvironmentVariable("MvvmAIOR3PackageOutputPath", PackageOutputDirectory);
+
+            DotNetTest(s => s
+                .SetProjectFile(TestProject)
+                .SetConfiguration(Configuration)
+                .EnableNoRestore()
+                .SetFilter("FullyQualifiedName~PackageIntegrationTests"));
         });
 
     Target Ci => _ => _
-        .DependsOn(UnitTest);
+        .DependsOn(UnitTest)
+        .DependsOn(UnitTestRoslynMatrix)
+        .DependsOn(ValidatePackage);
 }

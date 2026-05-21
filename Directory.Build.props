@@ -1,6 +1,10 @@
 <Project>
   <PropertyGroup>
-    <!-- Must match the MvvmAIO.R3.SourceGenerators.Roslyn* project referenced by tests (Roslyn4120 → 4.12.0). -->
-    <MvvmAIOR3SourceGeneratorsTestsRoslynVersion>4.12.0</MvvmAIOR3SourceGeneratorsTestsRoslynVersion>
+    <!-- Default test host Roslyn; override with -p:MvvmAIOR3SourceGeneratorsRoslynProject=... for matrix legs. -->
+    <MvvmAIOR3SourceGeneratorsRoslynProject Condition="'$(MvvmAIOR3SourceGeneratorsRoslynProject)' == ''">MvvmAIO.R3.SourceGenerators.Roslyn4120</MvvmAIOR3SourceGeneratorsRoslynProject>
+    <MvvmAIOR3SourceGeneratorsTestsRoslynVersion Condition="'$(MvvmAIOR3SourceGeneratorsRoslynProject)' == 'MvvmAIO.R3.SourceGenerators.Roslyn4031'">4.3.1</MvvmAIOR3SourceGeneratorsTestsRoslynVersion>
+    <MvvmAIOR3SourceGeneratorsTestsRoslynVersion Condition="'$(MvvmAIOR3SourceGeneratorsRoslynProject)' == 'MvvmAIO.R3.SourceGenerators.Roslyn4120'">4.12.0</MvvmAIOR3SourceGeneratorsTestsRoslynVersion>
+    <MvvmAIOR3SourceGeneratorsTestsRoslynVersion Condition="'$(MvvmAIOR3SourceGeneratorsRoslynProject)' == 'MvvmAIO.R3.SourceGenerators.Roslyn5000'">5.0.0</MvvmAIOR3SourceGeneratorsTestsRoslynVersion>
+    <MvvmAIOR3PackageOutputPath Condition="'$(MvvmAIOR3PackageOutputPath)' == ''">$(MSBuildThisFileDirectory)artifacts\package</MvvmAIOR3PackageOutputPath>
   </PropertyGroup>
 </Project>

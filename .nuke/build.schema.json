@@ -30,7 +30,9 @@
         "Pack",
         "Publish",
         "Restore",
-        "UnitTest"
+        "UnitTest",
+        "UnitTestRoslynMatrix",
+        "ValidatePackage"
       ]
     },
     "Verbosity": {
