@@ -54,7 +54,8 @@ internal static class GeneratorBootstrapSyntaxFactory
                 NamespaceDeclaration(BootstrapNamespaceName)
                     .AddMembers(
                         StructDeclaration("NullEvents")
-                            .AddModifiers(Token(SyntaxKind.InternalKeyword))));
+                            .AddModifiers(Token(SyntaxKind.InternalKeyword))
+                            .AddAttributeLists(CreateEditorBrowsableNeverAttributeList())));
 
     public static CompilationUnitSyntax CreateObservableEventsBootstrapExtensionsCompilationUnit(bool includeStatics) =>
         CompilationUnit()
@@ -123,6 +124,13 @@ internal static class GeneratorBootstrapSyntaxFactory
             .AddMembers(methods.ToArray());
     }
 
+    // Note: the bootstrap fallback intentionally takes <c>this object?</c> instead of a generic
+    // <c><![CDATA[<T>(this T)]]></c> form (ReactiveMarbles-style). A generic stub would share its
+    // erased signature <c>FromEvents<T>(T)</c> with the generic-constrained extensions emitted for
+    // <c>where T : Base, IFirst, ISecond</c> scenarios (MvvmAIO-only). Per the C# specification,
+    // type parameter constraints are not part of method signatures (CS0111) and are not a
+    // tiebreaker in overload resolution (CS0121), so the two forms would collide both at
+    // declaration time and at every call site inside a constrained generic method.
     private static MethodDeclarationSyntax CreateNullReturningExtension(
         string methodName,
         params ParameterSyntax[] extraParameters)
@@ -136,6 +144,7 @@ internal static class GeneratorBootstrapSyntaxFactory
         parameters.AddRange(extraParameters);
 
         return MethodDeclaration(NullEventsType, Identifier(methodName))
+            .AddAttributeLists(CreateEditorBrowsableNeverAttributeList())
             .AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword))
             .AddParameterListParameters(parameters.ToArray())
             .WithBody(
@@ -147,6 +156,7 @@ internal static class GeneratorBootstrapSyntaxFactory
     private static MethodDeclarationSyntax CreateObservableEventsStaticsExtension()
     {
         return MethodDeclaration(NullEventsType, Identifier("ObservableEventsStatics"))
+            .AddAttributeLists(CreateEditorBrowsableNeverAttributeList())
             .AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword))
             .WithTypeParameterList(TypeParameterList(SingletonSeparatedList(TypeParameter("T"))))
             .AddParameterListParameters(
@@ -158,4 +168,17 @@ internal static class GeneratorBootstrapSyntaxFactory
                     ReturnStatement(
                         DefaultExpression(NullEventsType))));
     }
+
+    private static AttributeListSyntax CreateEditorBrowsableNeverAttributeList() =>
+        AttributeList(
+            SingletonSeparatedList(
+                Attribute(ParseName("global::System.ComponentModel.EditorBrowsable"))
+                    .WithArgumentList(
+                        AttributeArgumentList(
+                            SingletonSeparatedList(
+                                AttributeArgument(
+                                    MemberAccessExpression(
+                                        SyntaxKind.SimpleMemberAccessExpression,
+                                        ParseName("global::System.ComponentModel.EditorBrowsableState"),
+                                        IdentifierName("Never"))))))));
 }

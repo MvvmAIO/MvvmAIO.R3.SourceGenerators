@@ -4,6 +4,21 @@ All notable changes to **MvvmAIO.R3.SourceGenerators** are documented here. The 
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-24
+
+### Changed
+
+- **IntelliSense polish** — bootstrap fallback extensions (`FromEvents`, `FromEventHandlers`, `FromRoutedEvents`, `FromRoutedEventHandlers`, `FromAttachedRoutedEvent`, `FromAttachedRoutedEventHandler`) and the `NullEvents` placeholder struct are now annotated with `[EditorBrowsable(EditorBrowsableState.Never)]`. Consumers in **separate assemblies** will no longer see the `object?`-typed stubs in completion lists; type-specific generated overloads (e.g. `FromEvents(this Button)`) remain visible and continue to win at every call site.
+
+### Compatibility
+
+- **No API or behavior change.** Same extension method names, same parameter lists, same generated wrappers as 0.6.0. The added attribute is metadata-only.
+- Within the **same project** as the analyzer-generated code, VS IntelliSense filtering depends on the *Tools → Options → Text Editor → C# → IntelliSense → "Hide advanced members"* setting (default on); cross-assembly consumption is the primary beneficiary.
+
+### Notes on a generic bootstrap form
+
+A `FromEvents<T>(this T source)` form (ReactiveMarbles-style) was evaluated and **intentionally not adopted**: it would share its erased signature `FromEvents<T>(T)` with MvvmAIO's generic-constrained extensions emitted for `where T : Base, IFirst, ISecond` scenarios. Per the C# specification, type parameter constraints are neither part of the method signature (CS0111) nor a tiebreaker in overload resolution (CS0121), so the two forms collide both at declaration time and at every call site inside a constrained generic method. The `this object?` stub is preserved for that reason; the IntelliSense improvement is delivered through `[EditorBrowsable]` instead.
+
 ## [0.6.0] - 2026-05-21
 
 ### Summary

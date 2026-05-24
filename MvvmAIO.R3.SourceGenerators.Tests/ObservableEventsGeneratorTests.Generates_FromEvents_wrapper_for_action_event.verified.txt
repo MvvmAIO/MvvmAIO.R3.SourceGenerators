@@ -46,6 +46,7 @@ internal interface IClickSourceEvents
 #nullable enable
 namespace R3.SourceGenerators
 {
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
     internal struct NullEvents
     {
     }
@@ -59,41 +60,49 @@ namespace R3.SourceGenerators
 {
     internal static partial class ObservableEventsBootstrapExtensions
     {
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
         public static R3.SourceGenerators.NullEvents FromEvents(this object? source)
         {
             return default(R3.SourceGenerators.NullEvents);
         }
 
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
         public static R3.SourceGenerators.NullEvents FromEventHandlers(this object? source)
         {
             return default(R3.SourceGenerators.NullEvents);
         }
 
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
         public static R3.SourceGenerators.NullEvents FromRoutedEvents(this object? source)
         {
             return default(R3.SourceGenerators.NullEvents);
         }
 
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
         public static R3.SourceGenerators.NullEvents FromRoutedEvents(this object? source, global::System.Object routes, bool handledEventsToo = false)
         {
             return default(R3.SourceGenerators.NullEvents);
         }
 
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
         public static R3.SourceGenerators.NullEvents FromRoutedEventHandlers(this object? source)
         {
             return default(R3.SourceGenerators.NullEvents);
         }
 
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
         public static R3.SourceGenerators.NullEvents FromRoutedEventHandlers(this object? source, global::System.Object routes, bool handledEventsToo = false)
         {
             return default(R3.SourceGenerators.NullEvents);
         }
 
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
         public static R3.SourceGenerators.NullEvents FromAttachedRoutedEvent(this object? source, global::System.Object routedEvent, global::System.Object routes = null, bool handledEventsToo = false)
         {
             return default(R3.SourceGenerators.NullEvents);
         }
 
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
         public static R3.SourceGenerators.NullEvents FromAttachedRoutedEventHandler(this object? source, global::System.Object routedEvent, global::System.Object routes = null, bool handledEventsToo = false)
         {
             return default(R3.SourceGenerators.NullEvents);
