@@ -162,6 +162,7 @@ Event-related warnings (`R3SG2001`, `R3SG2002`) apply to unsupported event deleg
 
 ## Design documentation
 
+- [AGENTS.md](AGENTS.md) — agent and contributor conventions (SyntaxFactory, `.Temp/`, SLNX, git workflow).
 - [Interface-based event generation](docs/design-interface-based-event-generation.md) — naming, hierarchy, routed events, file layout.
 - [CHANGELOG.md](CHANGELOG.md) — release notes and upgrade compatibility (including SyntaxFactory internal migration).
 
