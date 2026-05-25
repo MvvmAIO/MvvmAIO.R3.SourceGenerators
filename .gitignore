@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 # Local-only validation samples
 LocalSamples/
+
+# Scratch projects and one-off experiments (see AGENTS.md)
+.Temp/
