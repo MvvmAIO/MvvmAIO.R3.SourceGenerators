@@ -2,6 +2,10 @@
 
 Roslyn source generators for R3-based MVVM workflows.
 
+## Documentation
+
+**Canonical documentation:** [https://mvvmaio.github.io/R3.SourceGenerators.Docs/](https://mvvmaio.github.io/R3.SourceGenerators.Docs/) (VitePress, English + 简体中文). The GitHub README is an overview; the docs site covers generators, **R3SG** diagnostics, and architecture in depth.
+
 ## Stability
 
 This project is in an **early stage**. Until **1.0.0** is published, **breaking changes** may occur without a long deprecation window (API surface, generated code shape, namespaces, and package layout can all change). When upgrading, review [CHANGELOG.md](CHANGELOG.md) or GitHub releases.
@@ -163,7 +167,8 @@ Event-related warnings (`R3SG2001`, `R3SG2002`) apply to unsupported event deleg
 ## Design documentation
 
 - [AGENTS.md](AGENTS.md) — agent and contributor conventions (SyntaxFactory, `.Temp/`, SLNX, git workflow).
-- [Interface-based event generation](docs/design-interface-based-event-generation.md) — naming, hierarchy, routed events, file layout.
+- [Documentation site](https://mvvmaio.github.io/R3.SourceGenerators.Docs/) — user-facing guides (observable events, R3Command, diagnostics).
+- [Interface-based event generation](docs/design-interface-based-event-generation.md) — internal design notes (Chinese); see also the docs site **Observable events** page.
 - [CHANGELOG.md](CHANGELOG.md) — release notes and upgrade compatibility (including SyntaxFactory internal migration).
 
 ## Samples

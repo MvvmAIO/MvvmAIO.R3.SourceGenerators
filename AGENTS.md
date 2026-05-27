@@ -25,6 +25,7 @@ This Cursor workspace may include multiple roots:
 |------|------|
 | `MvvmAIO.R3.SourceGenerators/` | **Primary git repo** (`MvvmAIO/MvvmAIO.R3.SourceGenerators` on GitHub); **read [AGENTS.md](AGENTS.md)** in this folder first |
 | `../R3.SourceGenerators.Samples/MvvmAIO.R3.SourceGenerators.Samples/` | Separate git repo; WPF + Avalonia demos consuming the NuGet package |
+| `../R3.SourceGenerators.Docs/` | Separate git repo; **VitePress** consumer docs ([GitHub Pages](https://mvvmaio.github.io/R3.SourceGenerators.Docs/)) |
 | `../ObservableEvents-1.3.1/` | Local **reference only** (ReactiveMarbles ObservableEvents 1.3.x); not part of product CI |
 
 Do not commit `MvvmAIO.R3.SourceGenerators/.Temp/` (scratch; gitignored).
@@ -186,7 +187,15 @@ GitHub Actions: `dotnet.yml` (CI on `master`), `nuget-publish.yml` on tag `v*` �
 
 1. Bump `<Version>` in `MvvmAIO.R3.SourceGenerators.Package.csproj`.
 2. Add dated section in [CHANGELOG.md](CHANGELOG.md); clear `[Unreleased]` if used.
-3. Update [README.md](README.md) / design doc if behavior or public surface changed.
+3. Update [README.md](README.md) / design doc if behavior or public surface changed; sync **[R3.SourceGenerators.Docs](https://github.com/MvvmAIO/R3.SourceGenerators.Docs)** (canonical site: https://mvvmaio.github.io/R3.SourceGenerators.Docs/) — **both** `docs/` and `docs/zh/`:
+
+   | Docs path | Update when |
+   |-----------|-------------|
+   | `diagnostics/reference.md` | Any **R3SG** ID or message text changes |
+   | `generators/observable-events.md` | Event / routed API or observable codegen behavior |
+   | `generators/r3-command.md` | `[R3Command]` signatures, attributes, or command diagnostics |
+   | `getting-started.md` | Install steps or prerequisites change |
+   | `changelog.md` | Each dated release (summary + link to this repo CHANGELOG) |
 4. Run `Ci` locally.
 5. Commit; push `master`; tag `vX.Y.Z`; push tag (triggers NuGet publish).
 6. Optional: `gh release create vX.Y.Z` with notes from CHANGELOG.
@@ -208,7 +217,8 @@ Harness: `GeneratorTestHarness.Run` + `ToSnapshot`; references include `R3` and 
 - **New event entry or routed behavior:** start in `ObservableEventsGenerator.cs` collection + `EmitInterfaceBasedSources`; add syntax in `ObservableEventsSyntaxFactory.cs`; extend Avalonia/WPF helpers only if needed.
 - **IntelliSense / bootstrap:** `GeneratorBootstrapSyntaxFactory.cs` — preserve `object?` stubs for constraint overload coexistence; prefer `[EditorBrowsable]` over new generic bootstrap signatures.
 - **New command shape or diagnostic:** `R3CommandGenerator.cs` + descriptors + README matrix + tests.
-- **Docs-only:** README, CHANGELOG, `docs/design-interface-based-event-generation.md` — keep version/status in sync with package version.
+- **Docs-only (generator repo):** README, CHANGELOG, `docs/design-interface-based-event-generation.md` — keep version/status in sync with package version.
+- **Consumer docs site:** [R3.SourceGenerators.Docs](https://github.com/MvvmAIO/R3.SourceGenerators.Docs) (VitePress, Node 22). Canonical URL: https://mvvmaio.github.io/R3.SourceGenerators.Docs/ — update English `docs/` and 简体中文 `docs/zh/` (especially `diagnostics/reference.md` and generator pages) when **R3SG** or public API changes.
 
 ## Out of scope unless asked
 
