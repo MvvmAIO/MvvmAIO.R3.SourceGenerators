@@ -4,6 +4,11 @@ All notable changes to **MvvmAIO.R3.SourceGenerators** are documented here. The 
 
 ## [Unreleased]
 
+### Internal
+
+- Split `ObservableEventsGenerator` into `partial` files under `ObservableEvents/` (constants, models, discovery, interface pipeline, emission, generic constraints, routed detection, attached routed, helpers). Removed unused pre–interface-pipeline wrapper codegen paths. **No consumer API or generated-output change.**
+- Contributor docs: [AGENTS.md](AGENTS.md) § ObservableEventsGenerator layout, [docs/design-interface-based-event-generation.md](docs/design-interface-based-event-generation.md) §11, [docs/README.md](docs/README.md).
+
 ## [0.6.1] - 2026-05-24
 
 ### Changed

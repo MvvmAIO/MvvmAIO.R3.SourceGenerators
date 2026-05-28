@@ -166,9 +166,10 @@ Event-related warnings (`R3SG2001`, `R3SG2002`) apply to unsupported event deleg
 
 ## Design documentation
 
-- [AGENTS.md](AGENTS.md) — agent and contributor conventions (SyntaxFactory, `.Temp/`, SLNX, git workflow).
+- [AGENTS.md](AGENTS.md) — agent and contributor conventions (SyntaxFactory, `.Temp/`, SLNX, git workflow, **ObservableEventsGenerator** partial file map).
+- [docs/README.md](docs/README.md) — index of in-repo developer documentation.
 - [Documentation site](https://mvvmaio.github.io/R3.SourceGenerators.Docs/) — user-facing guides (observable events, R3Command, diagnostics).
-- [Interface-based event generation](docs/design-interface-based-event-generation.md) — internal design notes (Chinese); see also the docs site **Observable events** page.
+- [Interface-based event generation](docs/design-interface-based-event-generation.md) — internal design notes (Chinese): interface hierarchy algorithm, generated file layout, and **§11** generator source structure; see also the docs site **Observable events** page.
 - [CHANGELOG.md](CHANGELOG.md) — release notes and upgrade compatibility (including SyntaxFactory internal migration).
 
 ## Samples

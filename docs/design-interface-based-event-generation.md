@@ -1,9 +1,10 @@
 # 设计文档：基于接口继承的事件 Observable 生成
 
-> **版本**: v0.6.0  
-> **日期**: 2026-05-21（文档更新）  
-> **状态**: 已实现；随 NuGet **0.6.0** 发布（生成器内部自 **0.5.2** 起已切换为 SyntaxFactory 管线，用户可见 API 保持兼容）  
-> **影响范围**: `FromEvents()` / `FromEventHandlers()` / `FromRoutedEvents()` / `FromRoutedEventHandlers()` 生成管线
+> **版本**: v0.6.1+（生成物行为与 **0.6.0** 一致）  
+> **日期**: 2026-05-27（§11 源码结构）  
+> **状态**: 已实现；随 NuGet **0.6.0** 起对外提供接口化生成；**0.6.1** 起 bootstrap 使用 `[EditorBrowsable(Never)]`；生成器源码于 **Unreleased** 拆分为 `partial` 文件（无消费者 API 变更）  
+> **影响范围**: `FromEvents()` / `FromEventHandlers()` / `FromRoutedEvents()` / `FromRoutedEventHandlers()` 生成管线  
+> **贡献者索引**: 文件级导航见 [AGENTS.md](../AGENTS.md) § ObservableEventsGenerator layout
 
 ---
 
@@ -73,8 +74,10 @@ internal class Demo_ClickSourceFromEventObservable
 
 ### 3.1 核心数据结构
 
+类型定义位于 `MvvmAIO.R3.SourceGenerators/ObservableEvents/ObservableEventsModels.cs`（`internal`）：
+
 ```csharp
-sealed class EventInterfaceDescriptor
+internal sealed class EventInterfaceDescriptor
 {
     INamedTypeSymbol SourceType;           // 源类型（OriginalDefinition）
     string InterfaceName;                   // 生成接口名，如 "IButtonEvents"
@@ -82,6 +85,8 @@ sealed class EventInterfaceDescriptor
     ImmutableArray<INamedTypeSymbol> ParentTypes;   // 父接口对应的源类型（可能是 constructed type）
 }
 ```
+
+同级还有 `ObservableEventTargetSets`（一次编译收集到的全部 call-site 目标）、`GenericConstraintTarget`、`AttachedRoutedEventTarget`。
 
 ### 3.2 展开算法 — `ExpandForInterfaces`
 
@@ -275,14 +280,20 @@ internal sealed class BaseSource_NotifyEventsImpl<TSource> : IBaseSource_NotifyE
 
 ---
 
-## 8. 不受影响的代码路径
+## 8. 独立代码路径与已移除路径
 
-以下生成路径仍使用独立逻辑（非接口层次管线）：
+**仍使用独立逻辑（非接口层次管线）：**
 
-- `FromAttachedRoutedEvent()` / `FromAttachedRoutedEventHandler()` — Avalonia 附加路由事件（直接返回 `Observable<T>`）
-- Static 事件 (`ObservableEventsStatics`) — 当前已禁用（`StaticObservableEventsGenerationEnabled = false`）
+- `FromAttachedRoutedEvent()` / `FromAttachedRoutedEventHandler()` — Avalonia 附加路由事件（`ObservableEventsGenerator.AttachedRouted.cs`；直接返回 `Observable<T>`）
+- Static 事件 (`ObservableEventsStatics` / `OBS_*`) — 当前已禁用（`ObservableEventsConstants.StaticObservableEventsGenerationEnabled = false`）；`Discovery` 中保留发现分支以便将来重开
 
-`FromRoutedEvents()` / `FromRoutedEventHandlers()` 已接入接口方案；Avalonia 类型额外生成带 `routes` / `handledEventsToo` 的重载，无参重载使用 `Direct | Bubble` 与 `handledEventsToo: false` 构造实现类。
+**已接入接口方案：**
+
+- `FromRoutedEvents()` / `FromRoutedEventHandlers()` — `InterfacePipeline` + `InterfaceEmission`；Avalonia 类型在实现类上额外生成带 `routes` / `handledEventsToo` 的重载，无参重载使用 `Direct | Bubble` 与 `handledEventsToo: false`
+
+**已从源码移除（v0.6.0 接口化后遗留，Unreleased 内部清理）：**
+
+- v0.4.x **扁平 wrapper 类**发码（`GenerateObservableSourceForType`、`CreateWrapperClass`、旧 `CreateExtensionsClass` 链等）。仓库中不再存在这些符号；新功能不得复用该模式。
 
 ---
 
@@ -309,3 +320,36 @@ internal sealed class BaseSource_NotifyEventsImpl<TSource> : IBaseSource_NotifyE
 | `Generates_FromEvents_wrapper_for_generic_constraints` | 泛型约束组合接口 + 强转访问 |
 | `Generates_FromEventHandlers_wrapper_for_generic_constraints` | EventHandler 风格的约束组合 |
 | Avalonia routed / attached tests | 确认 routed 路径不受影响 |
+
+---
+
+## 11. 生成器源码结构（贡献者）
+
+自 **Unreleased** 起，`ObservableEventsGenerator` 为 `partial class`，按编译管线拆分。共享工程目录：`MvvmAIO.R3.SourceGenerators/MvvmAIO.R3.SourceGenerators/`。
+
+| 文件 | 职责 |
+|------|------|
+| `ObservableEventsGenerator.cs` | `IIncrementalGenerator.Initialize`、post-init、`RegisterSourceOutput` 编排 |
+| `ObservableEvents/ObservableEventsConstants.cs` | 入口方法名、`GeneratedNamespace`、`QualifiedType()` |
+| `ObservableEvents/ObservableEventsEntryKind.cs` | 入口种类枚举 |
+| `ObservableEvents/ObservableEventsModels.cs` | `EventInterfaceDescriptor` 等内部模型 |
+| `ObservableEventsGenerator.Discovery.cs` | 语法发现、`CollectObservableEventTargets` |
+| `ObservableEventsGenerator.InterfacePipeline.cs` | `EmitInterfaceBasedSources`、`ExpandForInterfaces`、接口名冲突 |
+| `ObservableEventsGenerator.InterfaceEmission.cs` | 接口 / 实现类 / 扩展方法语法发射 |
+| `ObservableEventsGenerator.GenericConstraints.cs` | `where T : A, B` 组合接口与泛型实现 |
+| `ObservableEventsGenerator.RoutedDetection.cs` | WPF / Avalonia 路由 CLR 事件判定 |
+| `ObservableEventsGenerator.AttachedRouted.cs` | 附加路由扩展 |
+| `ObservableEventsGenerator.EventProperties.cs` | 事件 Observable 属性、委托诊断 |
+| `ObservableEventsGenerator.Helpers.cs` | 标识符、约束子句、报告辅助 |
+| `ObservableEventsSyntaxFactory.cs` | 纯 SyntaxFactory 辅助（无编排） |
+
+**调用顺序（与 §2.2 架构图对应）：**
+
+```
+Initialize → Discovery.CollectObservableEventTargets
+          → InterfacePipeline.EmitInterfaceBasedSources
+          → InterfaceEmission / GenericConstraints（按目标发码）
+          → AttachedRouted（附加路由目标）
+```
+
+新增 `.cs` 时须同步 `MvvmAIO.R3.SourceGenerators.projitems`（字母序 `Compile Include`）。英文维护说明见 [AGENTS.md](../AGENTS.md)。

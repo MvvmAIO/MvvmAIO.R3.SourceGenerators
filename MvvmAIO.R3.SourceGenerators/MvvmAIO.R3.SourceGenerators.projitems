@@ -18,9 +18,20 @@
     <Compile Include="$(MSBuildThisFileDirectory)Models\Result.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Models\TypeInfo.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)GeneratedSourceHeader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEvents\ObservableEventsConstants.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEvents\ObservableEventsEntryKind.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEvents\ObservableEventsModels.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsSyntaxFactory.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)GeneratorBootstrapSyntaxFactory.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)R3CommandSyntaxFactory.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.AttachedRouted.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.Discovery.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.EventProperties.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.GenericConstraints.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.Helpers.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.InterfaceEmission.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.InterfacePipeline.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.RoutedDetection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ObservableEventsGenerator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)R3CommandGenerator.cs" />
   </ItemGroup>

@@ -33,7 +33,7 @@ Do not commit `MvvmAIO.R3.SourceGenerators/.Temp/` (scratch; gitignored).
 ## Solution and projects
 
 - Primary solution: **`MvvmAIO.R3.SourceGenerators.slnx`** (see [Solution format](#solution-format-prefer-slnx-over-sln) below).
-- Shared generator sources: `MvvmAIO.R3.SourceGenerators/` (`.shproj` linked by Roslyn variant projects).
+- Shared generator sources: `MvvmAIO.R3.SourceGenerators/MvvmAIO.R3.SourceGenerators/` (`.projitems` linked by Roslyn variant projects; add new `.cs` files there and in `.projitems`).
 - Analyzer builds: `MvvmAIO.R3.SourceGenerators.Roslyn4031`, `.Roslyn4120`, `.Roslyn5000` (CodeAnalysis 4.3.1 / 4.12 / 5.0).
 - Pack: `MvvmAIO.R3.SourceGenerators.Package/`.
 - Tests: `MvvmAIO.R3.SourceGenerators.Tests/` (Verify snapshots + harness).
@@ -42,7 +42,15 @@ Do not commit `MvvmAIO.R3.SourceGenerators/.Temp/` (scratch; gitignored).
 
 | Area | Files |
 |------|--------|
-| Event discovery & interface pipeline | `ObservableEventsGenerator.cs` (~2.6k lines): `EmitInterfaceBasedSources`, `ExpandForInterfaces`, `CreateEventImplClass`, collection from syntax |
+| Observable events orchestration | `ObservableEventsGenerator.cs` (`Initialize` only) |
+| Constants, entry kinds, models | `ObservableEvents/ObservableEventsConstants.cs`, `ObservableEventsEntryKind.cs`, `ObservableEventsModels.cs` |
+| Discovery & bootstrap resolution | `ObservableEventsGenerator.Discovery.cs` |
+| Interface pipeline | `ObservableEventsGenerator.InterfacePipeline.cs` — `EmitInterfaceBasedSources`, `ExpandForInterfaces`, collision resolution |
+| Interface / impl emission | `ObservableEventsGenerator.InterfaceEmission.cs` — `CreateEventInterface`, `CreateEventImplClass` |
+| Generic constraint combined extensions | `ObservableEventsGenerator.GenericConstraints.cs` |
+| Attached routed (Avalonia) | `ObservableEventsGenerator.AttachedRouted.cs` |
+| Routed CLR detection (WPF / Avalonia) | `ObservableEventsGenerator.RoutedDetection.cs` |
+| Event properties & delegate diagnostics | `ObservableEventsGenerator.EventProperties.cs`, `ObservableEventsGenerator.Helpers.cs` |
 | Event syntax emission | `ObservableEventsSyntaxFactory.cs` |
 | Post-init bootstrap (`NullEvents`, `object?` stubs) | `GeneratorBootstrapSyntaxFactory.cs` — stubs use `[EditorBrowsable(Never)]` since v0.6.1 |
 | Commands | `R3CommandGenerator.cs`, `R3CommandSyntaxFactory.cs` |
@@ -51,21 +59,60 @@ Do not commit `MvvmAIO.R3.SourceGenerators/.Temp/` (scratch; gitignored).
 | Partial-type placement for commands | `Models/HierarchyInfo*.cs` |
 | CI / pack / publish | `build/Program.cs` (Nuke), `.github/workflows/dotnet.yml`, `nuget-publish.yml` |
 
+## ObservableEventsGenerator layout
+
+`ObservableEventsGenerator` is a **`public sealed partial class`** in namespace `MvvmAIO.R3.SourceGenerators`. The `[Generator]` attribute and `Initialize` (orchestration only) live in the root file; shared types and constants live under `ObservableEvents/`.
+
+| File | Responsibility |
+|------|----------------|
+| `ObservableEventsGenerator.cs` | `Initialize`, post-init bootstrap, `RegisterSourceOutput` → `EmitInterfaceBasedSources` + attached routed loops |
+| `ObservableEvents/ObservableEventsConstants.cs` | Entry method names, `GeneratedNamespace`, `FullyQualifiedNullableFormat`, `QualifiedType()` |
+| `ObservableEvents/ObservableEventsEntryKind.cs` | `FromEvents`, `FromEventHandlers`, routed, attached routed kinds |
+| `ObservableEvents/ObservableEventsModels.cs` | `ObservableEventTargetSets`, `GenericConstraintTarget`, `AttachedRoutedEventTarget`, `EventInterfaceDescriptor` |
+| `ObservableEventsGenerator.Discovery.cs` | Syntax filtering, `CollectObservableEventTargets`, bootstrap / static / constraint / attached resolution |
+| `ObservableEventsGenerator.InterfacePipeline.cs` | `EmitInterfaceBasedSources`, `BuildEventInterfaceHierarchy`, `ExpandForInterfaces`, name collision resolution |
+| `ObservableEventsGenerator.InterfaceEmission.cs` | `GenerateEventInterfacesSource`, `CreateEventInterface`, `CreateEventImplClass`, `GenerateEventImplAndExtensionSource` |
+| `ObservableEventsGenerator.GenericConstraints.cs` | `GetGenericConstraintEvents`, `GenerateGenericConstraintEventSource`, constraint impl |
+| `ObservableEventsGenerator.RoutedDetection.cs` | `IsRoutedClrEvent`, WPF / Avalonia routed metadata |
+| `ObservableEventsGenerator.AttachedRouted.cs` | `GenerateAttachedRoutedEventSourceForTarget` (Avalonia attached events) |
+| `ObservableEventsGenerator.EventProperties.cs` | `TryCreateEventObservableProperty`, handler / delegate validation |
+| `ObservableEventsGenerator.Helpers.cs` | `ToIdentifier`, constraint clause syntax, diagnostic helpers |
+| `ObservableEventsSyntaxFactory.cs` | Roslyn syntax for emitted members (no orchestration) |
+
+**Runtime pipeline** (edit in this order when tracing behavior):
+
+```mermaid
+flowchart TD
+  init[ObservableEventsGenerator.Initialize]
+  discover[Discovery: CollectObservableEventTargets]
+  iface[InterfacePipeline: EmitInterfaceBasedSources]
+  emit[InterfaceEmission + GenericConstraints]
+  attached[AttachedRouted per target]
+  init --> discover
+  discover --> iface
+  iface --> emit
+  discover --> attached
+```
+
+**Removed (internal only):** pre–0.6.0 **flat wrapper** codegen (`GenerateObservableSourceForType`, `CreateWrapperClass`, old `CreateExtensionsClass` chain). Do not reintroduce without a design change; the interface pipeline is the only instance/routed path.
+
+**When adding a `.cs` file:** append an alphabetically ordered `<Compile Include="..."/>` entry in `MvvmAIO.R3.SourceGenerators.projitems` (all three `Roslyn*` projects pick it up automatically).
+
 ## Architecture (Observable events)
 
-1. **Post-init** registers bootstrap extensions returning `NullEvents` for unresolved call sites (`this object?`).
-2. **Incremental** pass collects invocation targets from user syntax.
-3. **Interface pipeline** (default for instance events + routed):
+1. **Post-init** (`ObservableEventsGenerator.cs`) registers bootstrap extensions returning `NullEvents` for unresolved call sites (`this object?`).
+2. **Incremental** pass (`Discovery`) collects invocation targets from user syntax.
+3. **Interface pipeline** (`InterfacePipeline` → `InterfaceEmission` / `GenericConstraints`) for instance events + routed:
    - Build `EventInterfaceDescriptor` hierarchy (exclusive events per type; names like `IButtonEvents`, `IButtonRoutedEvents`).
    - Emit `EventInterfaces.{kind}.g.cs` + per-type `{Type}.{kind}.g.cs` (extension + `*Impl`).
-4. **Attached routed** (Avalonia): separate extensions returning `Observable<T>` — not the interface model.
-5. **Static `ObservableEventsStatics` / `OBS_*`**: disabled (`StaticObservableEventsGenerationEnabled = false`).
+4. **Attached routed** (`AttachedRouted`, Avalonia): separate extensions returning `Observable<T>` — not the interface model.
+5. **Static `ObservableEventsStatics` / `OBS_*`**: disabled (`ObservableEventsConstants.StaticObservableEventsGenerationEnabled = false`); discovery branches remain for a future re-enable.
 
 **WPF routed:** requires consumer `UseWPF=true`. **Avalonia routed:** detected via `Avalonia.Interactivity.RoutedEvent` metadata; parameterless overload uses default `Direct | Bubble` + `handledEventsToo: false`; overload with `routes` / `handledEventsToo` uses `AddHandler`.
 
 **Do not** add `FromEvents<T>(this T)` bootstrap: it collides with generic-constraint combined extensions (CS0111 / CS0121). See [CHANGELOG.md](CHANGELOG.md) 0.6.1 notes.
 
-Design detail: [docs/design-interface-based-event-generation.md](docs/design-interface-based-event-generation.md) (may lag package version slightly — align with CHANGELOG when editing).
+Design detail: [docs/design-interface-based-event-generation.md](docs/design-interface-based-event-generation.md) (may lag package version slightly — align with CHANGELOG when editing). Dev doc index: [docs/README.md](docs/README.md).
 
 ## Architecture (R3Command)
 
@@ -167,8 +214,8 @@ New diagnostics: update `DiagnosticDescriptors.cs`, tests in `*GeneratorTests.cs
 From `MvvmAIO.R3.SourceGenerators/`:
 
 ```bash
-# Full local CI (Nuke)
-dotnet run --project build/_build.csproj -- --target Ci
+# Full local CI (Nuke) — run from this repo root, or pass --root explicitly
+dotnet run --project build/_build.csproj -- --root . --target Ci --configuration Release
 
 # Faster iteration
 dotnet build MvvmAIO.R3.SourceGenerators.slnx
@@ -214,10 +261,10 @@ Harness: `GeneratorTestHarness.Run` + `ToSnapshot`; references include `R3` and 
 
 ## Common agent tasks
 
-- **New event entry or routed behavior:** start in `ObservableEventsGenerator.cs` collection + `EmitInterfaceBasedSources`; add syntax in `ObservableEventsSyntaxFactory.cs`; extend Avalonia/WPF helpers only if needed.
+- **New event entry or routed behavior:** add discovery in `ObservableEventsGenerator.Discovery.cs` (syntax + `CollectObservableEventTargets`); wire `Initialize` if a new entry kind; extend `InterfacePipeline` / `InterfaceEmission` or `AttachedRouted` / `RoutedDetection` as needed; add syntax in `ObservableEventsSyntaxFactory.cs`; update `ObservableEventsEntryKind` + `ObservableEventsConstants` when adding a public entry name.
 - **IntelliSense / bootstrap:** `GeneratorBootstrapSyntaxFactory.cs` — preserve `object?` stubs for constraint overload coexistence; prefer `[EditorBrowsable]` over new generic bootstrap signatures.
 - **New command shape or diagnostic:** `R3CommandGenerator.cs` + descriptors + README matrix + tests.
-- **Docs-only (generator repo):** README, CHANGELOG, `docs/design-interface-based-event-generation.md` — keep version/status in sync with package version.
+- **Docs-only (generator repo):** README, CHANGELOG, `docs/design-interface-based-event-generation.md` — keep version/status and **§11 源码结构** in sync when moving or renaming generator files.
 - **Consumer docs site:** [R3.SourceGenerators.Docs](https://github.com/MvvmAIO/R3.SourceGenerators.Docs) (VitePress, Node 22). Canonical URL: https://mvvmaio.github.io/R3.SourceGenerators.Docs/ — update English `docs/` and 简体中文 `docs/zh/` (especially `diagnostics/reference.md` and generator pages) when **R3SG** or public API changes.
 
 ## Out of scope unless asked

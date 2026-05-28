@@ -60,16 +60,16 @@ internal static class ObservableEventsSyntaxFactory
 
         if (parameters.Length == 1)
         {
-            return R3ObservableType(ParseTypeName(ObservableEventsGenerator.QualifiedType(parameters[0].Type)));
+            return R3ObservableType(ParseTypeName(ObservableEventsConstants.QualifiedType(parameters[0].Type)));
         }
 
         if (parameters.Length == 2 && parameters[0].Type.SpecialType == SpecialType.System_Object)
         {
-            return R3ObservableType(ParseTypeName(ObservableEventsGenerator.QualifiedType(parameters[1].Type)));
+            return R3ObservableType(ParseTypeName(ObservableEventsConstants.QualifiedType(parameters[1].Type)));
         }
 
         var tupleElements = parameters
-            .Select(static p => TupleElement(ParseTypeName(ObservableEventsGenerator.QualifiedType(p.Type))))
+            .Select(static p => TupleElement(ParseTypeName(ObservableEventsConstants.QualifiedType(p.Type))))
             .ToArray();
         return R3ObservableType(TupleType(SeparatedList(tupleElements)));
     }
@@ -80,10 +80,10 @@ internal static class ObservableEventsSyntaxFactory
                 SeparatedList(
                 [
                     TupleElement(
-                        ParseTypeName(ObservableEventsGenerator.QualifiedType(parameters[0].Type)),
+                        ParseTypeName(ObservableEventsConstants.QualifiedType(parameters[0].Type)),
                         Identifier("sender")),
                     TupleElement(
-                        ParseTypeName(ObservableEventsGenerator.QualifiedType(parameters[1].Type)),
+                        ParseTypeName(ObservableEventsConstants.QualifiedType(parameters[1].Type)),
                         Identifier("e")),
                 ])));
 
@@ -388,7 +388,7 @@ internal static class ObservableEventsSyntaxFactory
         ImmutableArray<IParameterSymbol> parameters,
         ExpressionSyntax eventAccessor)
     {
-        var delegateTypeSyntax = ParseTypeName(ObservableEventsGenerator.QualifiedType(delegateType));
+        var delegateTypeSyntax = ParseTypeName(ObservableEventsConstants.QualifiedType(delegateType));
         var add = EventSubscriptionAdd(eventAccessor);
         var remove = EventSubscriptionRemove(eventAccessor);
 
@@ -404,7 +404,7 @@ internal static class ObservableEventsSyntaxFactory
 
         if (parameters.Length == 1)
         {
-            var elementType = ParseTypeName(ObservableEventsGenerator.QualifiedType(parameters[0].Type));
+            var elementType = ParseTypeName(ObservableEventsConstants.QualifiedType(parameters[0].Type));
             return ObservableFromEventInvocation(
                 delegateTypeSyntax,
                 elementType,
@@ -415,7 +415,7 @@ internal static class ObservableEventsSyntaxFactory
 
         if (parameters.Length == 2 && parameters[0].Type.SpecialType == SpecialType.System_Object)
         {
-            var elementType = ParseTypeName(ObservableEventsGenerator.QualifiedType(parameters[1].Type));
+            var elementType = ParseTypeName(ObservableEventsConstants.QualifiedType(parameters[1].Type));
             return ObservableFromEventInvocation(
                 delegateTypeSyntax,
                 elementType,
@@ -424,7 +424,7 @@ internal static class ObservableEventsSyntaxFactory
                 remove);
         }
 
-        var tupleTypes = parameters.Select(static p => ParseTypeName(ObservableEventsGenerator.QualifiedType(p.Type)));
+        var tupleTypes = parameters.Select(static p => ParseTypeName(ObservableEventsConstants.QualifiedType(p.Type)));
         var tupleType = TupleType(SeparatedList(tupleTypes.Select(static t => TupleElement(t))));
         return ObservableFromEventInvocation(
             delegateTypeSyntax,
@@ -439,9 +439,9 @@ internal static class ObservableEventsSyntaxFactory
         ImmutableArray<IParameterSymbol> parameters,
         ExpressionSyntax eventAccessor)
     {
-        var delegateTypeSyntax = ParseTypeName(ObservableEventsGenerator.QualifiedType(delegateType));
-        var p0 = ParseTypeName(ObservableEventsGenerator.QualifiedType(parameters[0].Type));
-        var p1 = ParseTypeName(ObservableEventsGenerator.QualifiedType(parameters[1].Type));
+        var delegateTypeSyntax = ParseTypeName(ObservableEventsConstants.QualifiedType(delegateType));
+        var p0 = ParseTypeName(ObservableEventsConstants.QualifiedType(parameters[0].Type));
+        var p1 = ParseTypeName(ObservableEventsConstants.QualifiedType(parameters[1].Type));
         var tupleType = TupleType(SeparatedList([TupleElement(p0), TupleElement(p1)]));
         return ObservableFromEventInvocation(
             delegateTypeSyntax,
@@ -458,10 +458,10 @@ internal static class ObservableEventsSyntaxFactory
         bool useEventHandlers,
         SyntaxTriviaList? documentation = null)
     {
-        var eventArgs = ParseTypeName(ObservableEventsGenerator.QualifiedType(eventArgsType));
+        var eventArgs = ParseTypeName(ObservableEventsConstants.QualifiedType(eventArgsType));
         var eventFieldAccess = MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
-            ParseName(ObservableEventsGenerator.QualifiedType(routedEventField.ContainingType)),
+            ParseName(ObservableEventsConstants.QualifiedType(routedEventField.ContainingType)),
             IdentifierName(routedEventField.Name));
 
         var addHandler = InvocationExpression(
