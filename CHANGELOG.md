@@ -4,10 +4,17 @@ All notable changes to **MvvmAIO.R3.SourceGenerators** are documented here. The 
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-05-31
+
 ### Internal
 
 - Split `ObservableEventsGenerator` into `partial` files under `ObservableEvents/` (constants, models, discovery, interface pipeline, emission, generic constraints, routed detection, attached routed, helpers). Removed unused pre–interface-pipeline wrapper codegen paths. **No consumer API or generated-output change.**
+- Expanded test coverage for previously unasserted diagnostics: `R3SG1001` (unsupported `[R3Command]` signatures: `static`, multi-parameter, parameterless `Task<T>`/`ValueTask<T>`), `R3SG2001` (`FromEvents` unsupported event delegate), and `R3SG2002` (`FromEventHandlers` unsupported delegate). Includes mixed supported/unsupported event scenarios.
 - Contributor docs: [AGENTS.md](AGENTS.md) § ObservableEventsGenerator layout, [docs/design-interface-based-event-generation.md](docs/design-interface-based-event-generation.md) §11, [docs/README.md](docs/README.md).
+
+### Compatibility
+
+- **No API or behavior change.** Internal refactor and added tests only.
 
 ## [0.6.1] - 2026-05-24
 
