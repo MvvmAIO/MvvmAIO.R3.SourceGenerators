@@ -287,4 +287,77 @@ public sealed class R3CommandGeneratorTests
         Assert.Contains("R3SG1004", snapshot);
         Assert.DoesNotContain("SaveCommand", snapshot);
     }
+
+    [Fact]
+    public void Reports_diagnostic_for_static_method()
+    {
+        const string source = """
+            namespace Demo;
+
+            public partial class ShellViewModel
+            {
+                [MvvmAIO.R3.R3Command]
+                private static void Save()
+                {
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new R3CommandGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Contains("R3SG1001", snapshot);
+        Assert.DoesNotContain("SaveCommand", snapshot);
+    }
+
+    [Fact]
+    public void Reports_diagnostic_for_method_with_multiple_parameters()
+    {
+        const string source = """
+            namespace Demo;
+
+            public partial class ShellViewModel
+            {
+                [MvvmAIO.R3.R3Command]
+                private void Save(int a, int b)
+                {
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new R3CommandGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Contains("R3SG1001", snapshot);
+        Assert.DoesNotContain("SaveCommand", snapshot);
+    }
+
+    [Fact]
+    public void Reports_diagnostic_for_parameterless_task_of_T_method()
+    {
+        const string source = """
+            namespace Demo;
+
+            public partial class ShellViewModel
+            {
+                [MvvmAIO.R3.R3Command]
+                private System.Threading.Tasks.Task<string> Save()
+                {
+                    return System.Threading.Tasks.Task.FromResult("data");
+                }
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new R3CommandGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Contains("R3SG1001", snapshot);
+        Assert.DoesNotContain("SaveCommand", snapshot);
+    }
 }

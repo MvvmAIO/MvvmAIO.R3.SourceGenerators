@@ -330,6 +330,62 @@ public sealed class ObservableEventsGeneratorTests
         Assert.Contains("Notified", snapshot);
     }
 
+    [Fact]
+    public void Reports_diagnostic_for_unsupported_event_delegate()
+    {
+        const string source = """
+            namespace Demo;
+
+            public class MixedSource
+            {
+                public event System.Action? Good;
+                public event System.Func<int>? Bad;
+            }
+
+            public static class Usage
+            {
+                public static void Run(MixedSource s) => s.FromEvents();
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new ObservableEventsGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("R3SG2001", snapshot);
+        Assert.Contains("Good", snapshot);
+    }
+
+    [Fact]
+    public void Reports_diagnostic_for_unsupported_from_event_handlers_delegate()
+    {
+        const string source = """
+            namespace Demo;
+
+            public class MixedHandlerSource
+            {
+                public event System.EventHandler? Good;
+                public event System.Action<int>? Bad;
+            }
+
+            public static class Usage
+            {
+                public static void Run(MixedHandlerSource s) => s.FromEventHandlers();
+            }
+            """;
+
+        GeneratorRunOutput output = GeneratorTestHarness.Run(
+            source,
+            generators: new IIncrementalGenerator[] { new ObservableEventsGenerator() });
+        string snapshot = GeneratorTestHarness.ToSnapshot(output);
+
+        Assert.Empty(output.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("R3SG2002", snapshot);
+        Assert.Contains("Good", snapshot);
+    }
+
     private const string AvaloniaStubs = """
         namespace Avalonia.Interactivity
         {
